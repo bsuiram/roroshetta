@@ -1,0 +1,12 @@
+{
+    "config": {
+        "abort": {
+            "not_supported": "Device not supported"
+        },
+        "step": {
+            "confirm": {
+                "description": "Do you want to set up {name} ({address})?"
+            }
+        }
+    }
+}
