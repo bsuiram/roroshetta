@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    CONF_ADDRESS,
     CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     CONCENTRATION_PARTS_PER_MILLION,
     PERCENTAGE,
@@ -183,9 +184,15 @@ class RoroshettaSensor(CoordinatorEntity, SensorEntity):
         )
         super().__init__(coordinator)
         self.entity_description = description
-        self._attr_unique_id = f"{coordinator.ble_device.address}_{description.key}"
+        address = (
+            coordinator.entry.unique_id
+            or coordinator.entry.data.get(CONF_ADDRESS)
+            or coordinator.ble_device.address
+            or coordinator.entry.entry_id
+        )
+        self._attr_unique_id = f"{address}_{description.key}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.ble_device.address)},
+            identifiers={(DOMAIN, str(address))},
             name="Roroshetta Sense",
             manufacturer="Roroshetta",
             model="Sense",
@@ -203,4 +210,4 @@ class RoroshettaSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        return self.coordinator.available
+        return self.coordinator.last_update_success

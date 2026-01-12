@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "pair": {
-        "description": "Press the pairing button on {name} ({address}) now, then click Submit to continue."
+        "description": "Press the pairing button on {name} ({address}) now. The device should indicate pairing mode (LED blink or similar). Then click Submit within a few seconds to continue."
       },
       "confirm": {
         "description": "Do you want to set up {name} ({address})?"

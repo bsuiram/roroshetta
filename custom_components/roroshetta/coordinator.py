@@ -4,23 +4,33 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timedelta
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from bleak import BleakClient
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
+try:
+    from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
+except ImportError:  # pragma: no cover - fallback for environments without the helper
+    BleakClientWithServiceCache = BleakClient  # type: ignore[misc,assignment]
+    establish_connection = None
 
 from homeassistant.components import bluetooth
-from homeassistant.components.bluetooth.active_update_coordinator import (
-    ActiveBluetoothDataUpdateCoordinator,
-)
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import CoreState, HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from .const import BEEF_CHARACTERISTIC, DOMAIN, UPDATE_INTERVAL
+from .const import (
+    BEEF_CHARACTERISTIC,
+    DATA_PAIRED_ONCE,
+    DOMAIN,
+    PAIRING_WINDOW_SECONDS,
+    UPDATE_INTERVAL,
+)
 
 if TYPE_CHECKING:
     pass
@@ -50,9 +60,7 @@ class RoroshettaData:
     uptime: int | None = None
 
 
-class RoroshettaDataUpdateCoordinator(
-    ActiveBluetoothDataUpdateCoordinator[RoroshettaData]
-):
+class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
     """Class to manage fetching Roroshetta data."""
 
     def __init__(
@@ -69,61 +77,40 @@ class RoroshettaDataUpdateCoordinator(
         super().__init__(
             hass=hass,
             logger=logger,
-            address=ble_device.address,
-            needs_poll_method=self._needs_poll,
-            poll_method=self._async_update,
-            mode=bluetooth.BluetoothScanningMode.ACTIVE,
-            connectable=True,
+            name=DOMAIN,
+            update_interval=timedelta(seconds=UPDATE_INTERVAL),
         )
         self.ble_device = ble_device
         self.entry = entry
         self.data = RoroshettaData()
         self._client: BleakClient | None = None
         self._notification_received = asyncio.Event()
+        self._paired_once = bool(entry.data.get(DATA_PAIRED_ONCE))
+        self._pairing_delay_done = False
         _LOGGER.debug("Roroshetta coordinator initialized successfully")
 
-    @callback
-    def _needs_poll(
-        self,
-        service_info: bluetooth.BluetoothServiceInfoBleak,
-        seconds_since_last_poll: float | None,
-    ) -> bool:
-        """Return True if we need to poll."""
-        available_device = bluetooth.async_ble_device_from_address(
-            self.hass, service_info.device.address
-        )
-        needs_poll = (
-            self.hass.state is CoreState.running
-            and (
-                seconds_since_last_poll is None
-                or seconds_since_last_poll >= UPDATE_INTERVAL
-            )
-            and available_device is not None
-        )
-        _LOGGER.debug(
-            "Roroshetta device %s needs poll: %s (seconds since last poll: %s, device available: %s)",
-            service_info.device.address,
-            needs_poll,
-            seconds_since_last_poll,
-            available_device is not None,
-        )
-        return needs_poll
-
-    async def _async_update(
-        self, service_info: bluetooth.BluetoothServiceInfoBleak
-    ) -> RoroshettaData:
+    async def _async_update_data(self) -> RoroshettaData:
         """Poll the device."""
+        address = self.entry.unique_id
+        assert address is not None
         _LOGGER.debug(
             "Starting data update for Roroshetta device at %s",
-            service_info.device.address,
+            address,
         )
+        if not self._paired_once and not self._pairing_delay_done:
+            _LOGGER.debug(
+                "Waiting %d seconds for pairing window before first connection",
+                PAIRING_WINDOW_SECONDS,
+            )
+            await asyncio.sleep(PAIRING_WINDOW_SECONDS)
+            self._pairing_delay_done = True
 
         # Check if device is available before attempting connection
-        available_device = bluetooth.async_ble_device_from_address(
-            self.hass, service_info.device.address
-        )
+        available_device = bluetooth.async_ble_device_from_address(self.hass, address)
         if not available_device:
-            error_msg = f"Roroshetta device at {service_info.device.address} is not available in the Bluetooth cache"
+            error_msg = (
+                f"Roroshetta device at {address} is not available in the Bluetooth cache"
+            )
             _LOGGER.warning(error_msg)
             raise UpdateFailed(error_msg)
 
@@ -138,18 +125,30 @@ class RoroshettaDataUpdateCoordinator(
                     "Connection attempt %d/%d for Roroshetta device at %s (with pairing enabled)",
                     attempt + 1,
                     max_retries,
-                    service_info.device.address,
+                    address,
                 )
 
-                # Use shorter timeout for initial connection and enable pairing
-                async with BleakClient(
-                    service_info.device, timeout=10.0, pair=True
-                ) as client:
-                    self._client = client
-                    _LOGGER.debug(
-                        "Connected to Roroshetta device at %s",
-                        service_info.device.address,
+                # Use the Home Assistant recommended connection helper when available.
+                if establish_connection is not None:
+                    client = await establish_connection(
+                        BleakClientWithServiceCache,
+                        available_device,
+                        address,
+                        timeout=10.0,
                     )
+                else:
+                    client = BleakClient(available_device, timeout=10.0)
+                    await client.connect()
+
+                self._client = client
+                _LOGGER.debug(
+                    "Connected to Roroshetta device at %s",
+                    address,
+                )
+
+                try:
+                    if not self._paired_once and hasattr(client, "pair"):
+                        await client.pair()
 
                     def handle_notify(sender, data):
                         """Handle notification from device."""
@@ -177,12 +176,14 @@ class RoroshettaDataUpdateCoordinator(
                     except asyncio.TimeoutError:
                         _LOGGER.warning(
                             "Timeout waiting for notification from Roroshetta device at %s",
-                            service_info.device.address,
+                            address,
                         )
 
                     await client.stop_notify(BEEF_CHARACTERISTIC)
                     _LOGGER.debug("Stopped notification listener")
-                    break  # Success, exit retry loop
+                finally:
+                    await client.disconnect()
+                break  # Success, exit retry loop
 
             except BleakError as err:
                 error_type = "Bluetooth connection error"
@@ -193,14 +194,14 @@ class RoroshettaDataUpdateCoordinator(
                 elif "timeout" in str(err).lower():
                     error_type = "Connection timeout"
 
-                error_msg = f"{error_type} for Roroshetta device at {service_info.device.address} (attempt {attempt + 1}/{max_retries}): {err}"
+                error_msg = f"{error_type} for Roroshetta device at {address} (attempt {attempt + 1}/{max_retries}): {err}"
                 _LOGGER.warning(error_msg)
 
                 # If this is the last attempt, raise the error
                 if attempt == max_retries - 1:
                     _LOGGER.error(
                         "All connection attempts failed for Roroshetta device at %s",
-                        service_info.device.address,
+                        address,
                     )
                     raise UpdateFailed(error_msg) from err
 
@@ -209,18 +210,23 @@ class RoroshettaDataUpdateCoordinator(
                 _LOGGER.debug(
                     "Waiting %d seconds before retry for Roroshetta device at %s",
                     wait_time,
-                    service_info.device.address,
+                    address,
                 )
                 await asyncio.sleep(wait_time)
 
             except Exception as err:
-                error_msg = f"Unexpected error polling Roroshetta device at {service_info.device.address} (attempt {attempt + 1}/{max_retries}): {err}"
+                error_msg = f"Unexpected error polling Roroshetta device at {address} (attempt {attempt + 1}/{max_retries}): {err}"
                 _LOGGER.error(error_msg)
 
                 # For unexpected errors, don't retry
                 raise UpdateFailed(error_msg) from err
 
         self._client = None
+
+        if not self._paired_once:
+            self._paired_once = True
+            data = {**self.entry.data, DATA_PAIRED_ONCE: True}
+            self.hass.config_entries.async_update_entry(self.entry, data=data)
 
         parsed_data = self.data
         _LOGGER.debug("Returning parsed data from Roroshetta device: %s", parsed_data)
@@ -261,21 +267,3 @@ class RoroshettaDataUpdateCoordinator(
             self.data.pm25,
             self.data.uptime,
         )
-
-    @callback
-    def _async_handle_unavailable(
-        self, service_info: bluetooth.BluetoothServiceInfoBleak
-    ) -> None:
-        """Handle the device going unavailable."""
-        super()._async_handle_unavailable(service_info)
-        _LOGGER.info("Roroshetta device %s is unavailable", service_info.device.address)
-
-    @callback
-    def _async_handle_bluetooth_event(
-        self,
-        service_info: bluetooth.BluetoothServiceInfoBleak,
-        change: bluetooth.BluetoothChange,
-    ) -> None:
-        """Handle a Bluetooth event."""
-        self.ble_device = service_info.device
-        super()._async_handle_bluetooth_event(service_info, change)

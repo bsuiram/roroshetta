@@ -36,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RoroshettaConfigEntry) -
     coordinator = RoroshettaDataUpdateCoordinator(hass, _LOGGER, ble_device, entry)
     entry.runtime_data = coordinator
 
-    entry.async_on_unload(coordinator.async_start())
+    await coordinator.async_config_entry_first_refresh()
     _LOGGER.debug("Started Roroshetta coordinator")
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
