@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "bluetooth": [
     {
+      "service_uuid": "0000f00d-1212-efde-1523-785fef13d123"
+    },
+    {
       "local_name": "Roroshetta Sense",
       "connectable": true
     },

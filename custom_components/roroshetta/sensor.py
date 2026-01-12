@@ -23,6 +23,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
@@ -164,7 +165,7 @@ async def async_setup_entry(
     _LOGGER.debug("Added Roroshetta sensor entities to Home Assistant")
 
 
-class RoroshettaSensor(SensorEntity):
+class RoroshettaSensor(CoordinatorEntity, SensorEntity):
     """Representation of a Roroshetta sensor."""
 
     entity_description: RoroshettaSensorEntityDescription
@@ -180,8 +181,7 @@ class RoroshettaSensor(SensorEntity):
             description.key,
             coordinator.ble_device.address,
         )
-        super().__init__()
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.ble_device.address}_{description.key}"
         self._attr_device_info = DeviceInfo(

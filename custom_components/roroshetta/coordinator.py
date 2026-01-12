@@ -89,20 +89,16 @@ class RoroshettaDataUpdateCoordinator(
         seconds_since_last_poll: float | None,
     ) -> bool:
         """Return True if we need to poll."""
+        available_device = bluetooth.async_ble_device_from_address(
+            self.hass, service_info.device.address
+        )
         needs_poll = (
             self.hass.state is CoreState.running
             and (
                 seconds_since_last_poll is None
                 or seconds_since_last_poll >= UPDATE_INTERVAL
             )
-            and bool(
-                bluetooth.async_ble_device_from_address(
-                    self.hass, service_info.device.address, connectable=True
-                )
-            )
-        )
-        available_device = bluetooth.async_ble_device_from_address(
-            self.hass, service_info.device.address, connectable=True
+            and available_device is not None
         )
         _LOGGER.debug(
             "Roroshetta device %s needs poll: %s (seconds since last poll: %s, device available: %s)",
@@ -124,10 +120,10 @@ class RoroshettaDataUpdateCoordinator(
 
         # Check if device is available before attempting connection
         available_device = bluetooth.async_ble_device_from_address(
-            self.hass, service_info.device.address, connectable=True
+            self.hass, service_info.device.address
         )
         if not available_device:
-            error_msg = f"Roroshetta device at {service_info.device.address} is not available for connection"
+            error_msg = f"Roroshetta device at {service_info.device.address} is not available in the Bluetooth cache"
             _LOGGER.warning(error_msg)
             raise UpdateFailed(error_msg)
 

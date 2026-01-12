@@ -1,6 +1,9 @@
 {
   "config": {
     "step": {
+      "pair": {
+        "description": "Press the pairing button on {name} ({address}) now, then click Submit to continue."
+      },
       "confirm": {
         "description": "Do you want to set up {name} ({address})?"
       }

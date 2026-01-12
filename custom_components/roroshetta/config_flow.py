@@ -41,7 +41,37 @@ class RoroshettaConfigFlow(ConfigFlow, domain=DOMAIN):
             "Roroshetta device discovery info stored, proceeding to confirm step"
         )
 
-        return await self.async_step_confirm()
+        return await self.async_step_pair()
+
+    async def async_step_pair(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask the user to put the device into pairing mode."""
+        assert self._discovery_info is not None
+        _LOGGER.debug(
+            "Pairing step called for Roroshetta device: %s",
+            self._discovery_info.address,
+        )
+
+        if user_input is not None:
+            _LOGGER.debug(
+                "User confirmed pairing mode for Roroshetta device: %s",
+                self._discovery_info.address,
+            )
+            return await self.async_step_confirm()
+
+        self._set_confirm_only()
+        _LOGGER.debug(
+            "Showing pairing form for Roroshetta device: %s",
+            self._discovery_info.address,
+        )
+        return self.async_show_form(
+            step_id="pair",
+            description_placeholders={
+                "name": self._discovery_info.name or "Roroshetta Sense",
+                "address": format_mac(self._discovery_info.address),
+            },
+        )
 
     async def async_step_confirm(
         self, user_input: dict[str, Any] | None = None

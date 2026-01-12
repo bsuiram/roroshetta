@@ -25,9 +25,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RoroshettaConfigEntry) -
     assert address is not None
     _LOGGER.debug("Roroshetta device address: %s", address)
 
-    ble_device = bluetooth.async_ble_device_from_address(
-        hass, address, connectable=True
-    )
+    ble_device = bluetooth.async_ble_device_from_address(hass, address)
     if not ble_device:
         _LOGGER.error("Could not find Roroshetta device with address %s", address)
         raise ConfigEntryNotReady(
