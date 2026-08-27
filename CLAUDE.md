@@ -9,8 +9,9 @@ sensors from a Safera / Røroshetta Sense kitchen hood over BLE. There is no bui
 suite, no linter config, and no `requirements` in the manifest — it is plain Python deployed by
 copying `custom_components/roroshetta/` into a Home Assistant config directory and restarting HA.
 
-Status per the top-level README: it installs and fetches sensor data but historically did not keep
-updating. That reconnect/notification loop is the live area of work.
+Status: working. The integration streams all 14 sensors at ~1 Hz against a real hood. The top-level
+README still says "does not work" — it predates the fix. Note the component README also describes a
+polling design with a 60s interval and 3 retries; that is stale too, see Architecture below.
 
 ## Running / debugging
 
@@ -47,15 +48,55 @@ push data → sensor entities read from `coordinator.data`.
   later restarts skip both the delay and the pair call. Preserve this flag when writing entry data.
 - **`entry.runtime_data` is the coordinator** (typed via `type RoroshettaConfigEntry =
   ConfigEntry[RoroshettaDataUpdateCoordinator]` in `coordinator.py`) — no `hass.data[DOMAIN]`.
+- **Availability is connection state, not `last_update_success`.** On a push coordinator with no
+  `_async_update_data`, `last_update_success` is `True` forever, so entities would show stale values
+  as live. `coordinator.device_available` instead requires an active connection plus a notification
+  newer than `STALE_AFTER_SECONDS`, and `_set_connected()` calls `async_update_listeners()` on
+  transition so entities re-render the instant a link drops. Caveat: staleness alone does not
+  self-trigger a re-render — only connect/disconnect pushes do.
 - **`sensor.py` is table-driven.** Each sensor is a `RoroshettaSensorEntityDescription` with a
   `value_fn(coordinator)`; adding a sensor means adding a field to the `RoroshettaData` dataclass,
   a decode line in `_parse_data`, and one entry in the `SENSORS` tuple.
 
 ## The BLE payload
 
-`_parse_data` decodes a ~60-byte little-endian frame by hardcoded offsets, mirroring `decode_env1`
-in `test.py`. The offsets were reverse-engineered from dumps against app screenshots and several are
-marked unsure (`alarm_level` @44, `activity` @45, `grease_filter` @59). **Keep `test.py` and
+**Real frames are 69 bytes, arriving about once per second.** `test.py`'s docstring claims "≈ 54
+bytes" and `_parse_data` guards on `len(data) < 60` — both were written before anyone measured, and
+both are wrong. Highest mapped offset is 59, so **bytes 60-68 are entirely unexplored**.
+
+`_parse_data` decodes the frame little-endian by hardcoded offsets, mirroring `decode_env1` in
+`test.py`. The offsets were reverse-engineered from dumps against app screenshots and several are
+still marked unsure (`alarm_level` @44, `activity` @45, `grease_filter` @59). **Keep `test.py` and
 `coordinator._parse_data` in sync** — if you change a scaling factor or offset in one, change it in
-the other, and prefer validating against a live device before trusting a new mapping. Frames shorter
-than 60 bytes are dropped with a warning.
+the other, and validate against a live device before trusting a new mapping.
+
+Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
+6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via
+`get_u16_le(36, 3)` despite the helper's name.
+
+## Traps that already bit this code
+
+Two bugs here cost real debugging time and are easy to reintroduce:
+
+- **`asyncio.wait()` requires tasks.** Passing bare coroutines raises `TypeError: Passing coroutines
+  is forbidden` on Python 3.11+. It fired every connection right after `start_notify`, got swallowed
+  by the loop's broad `except Exception`, and disconnected — so exactly one frame arrived and the
+  integration looked like it "fetched once then stopped".
+- **`BleakClient.set_disconnected_callback` no longer exists** (removed in bleak 0.19). The old code
+  guarded it with `hasattr`, so it silently did nothing and dropped links were never noticed. The
+  callback must be passed to `establish_connection(...)` / `BleakClient(...)` at construction.
+
+The broad `except Exception` in `_run_notify_loop` is what turned both into silent misbehaviour
+rather than a traceback. Be suspicious of it when a symptom looks like "works once, then nothing".
+
+## Verifying a change without hardware
+
+`homeassistant` and `bleak` are not installed locally, so `coordinator.py` cannot simply be imported.
+The workable pattern is to stub both module trees in `sys.modules` (each stub needs `__path__ = []`
+to act as a package, and the `DataUpdateCoordinator` stub needs `__class_getitem__` to be
+subscriptable), then load `coordinator.py` by file path under a synthetic package whose `__path__`
+points at the component directory — that satisfies `from .const import ...` without executing
+`__init__.py`. A fake client that streams N notifications then fires its `disconnected_callback` is
+enough to exercise connect, stream, disconnect, reconnect and shutdown timing.
+
+This proves control flow only. It says nothing about byte offsets, which need a real device.
