@@ -48,6 +48,11 @@ push data → sensor entities read from `coordinator.data`.
   later restarts skip both the delay and the pair call. Preserve this flag when writing entry data.
 - **`entry.runtime_data` is the coordinator** (typed via `type RoroshettaConfigEntry =
   ConfigEntry[RoroshettaDataUpdateCoordinator]` in `coordinator.py`) — no `hass.data[DOMAIN]`.
+- **The BLE link is held open permanently, by design.** The hood almost certainly accepts one
+  central at a time, so while HA is running the Safera phone app cannot connect. This was considered
+  and accepted (2026-08-27): the app was only ever a debugging tool, and log/data access through HA
+  replaces it. Do not add connection-sharing or idle-release logic on the assumption that app access
+  matters — it does not.
 - **Availability is connection state, not `last_update_success`.** On a push coordinator with no
   `_async_update_data`, `last_update_success` is `True` forever, so entities would show stale values
   as live. `coordinator.device_available` instead requires an active connection plus a notification
