@@ -3,7 +3,9 @@ rules:
   action-setup:
     status: exempt
     comment: No custom actions
-  appropriate-polling: done
+  appropriate-polling:
+    status: exempt
+    comment: Push-based integration, data arrives via GATT notifications
   brands: done
   common-modules: done
   config-flow-test-coverage: done

@@ -210,4 +210,4 @@ class RoroshettaSensor(CoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        return self.coordinator.last_update_success
+        return self.coordinator.device_available

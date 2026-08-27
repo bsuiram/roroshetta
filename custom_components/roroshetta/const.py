@@ -13,3 +13,11 @@ DATA_PAIRED_ONCE = "paired_once"
 
 # Pairing window delay on first setup
 PAIRING_WINDOW_SECONDS = 5
+
+# Connection loop timings
+DEVICE_WAIT_SECONDS = 5
+MAX_BACKOFF_SECONDS = 30
+STOP_TIMEOUT_SECONDS = 5
+
+# Mark entities unavailable if no notification arrives within this window
+STALE_AFTER_SECONDS = 300
