@@ -15,10 +15,10 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_ADDRESS,
-    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
-    CONCENTRATION_PARTS_PER_MILLION,
     PERCENTAGE,
+    UnitOfDensity,
     UnitOfPower,
+    UnitOfRatio,
     UnitOfTemperature,
     UnitOfTime,
 )
@@ -74,7 +74,7 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
         key="co2",
         name="CO₂",
         device_class=SensorDeviceClass.CO2,
-        native_unit_of_measurement=CONCENTRATION_PARTS_PER_MILLION,
+        native_unit_of_measurement=UnitOfRatio.PARTS_PER_MILLION,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.co2,
     ),
@@ -82,7 +82,7 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
         key="tvoc",
         name="tVOC",
         device_class=SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS,
-        native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.tvoc,
     ),
@@ -90,7 +90,7 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
         key="pm25",
         name="PM2.5",
         device_class=SensorDeviceClass.PM25,
-        native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.pm25,
     ),
@@ -201,11 +201,7 @@ class RoroshettaSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self) -> StateType:
         """Return the native value of the sensor."""
-        value = self.entity_description.value_fn(self.coordinator)
-        _LOGGER.debug(
-            "Roroshetta sensor %s native value: %s", self.entity_description.key, value
-        )
-        return value
+        return self.entity_description.value_fn(self.coordinator)
 
     @property
     def available(self) -> bool:

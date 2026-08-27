@@ -337,7 +337,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         self.data.grease_filter = get_u16_le(59, 1)
 
         _LOGGER.debug(
-            "Parsed Roroshetta data: temperature=%.2f°C, humidity=%.1f%%, CO2=%d ppm, TVOC=%d ppb, PM2.5=%.2f µg/m³, uptime=%d s",
+            "Parsed Roroshetta data: temperature=%.2f°C, humidity=%.1f%%, CO2=%d ppm, TVOC=%d µg/m³, PM2.5=%.2f µg/m³, uptime=%d s",
             self.data.temperature,
             self.data.humidity,
             self.data.co2,

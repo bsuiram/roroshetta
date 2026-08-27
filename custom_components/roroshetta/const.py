@@ -19,5 +19,6 @@ DEVICE_WAIT_SECONDS = 5
 MAX_BACKOFF_SECONDS = 30
 STOP_TIMEOUT_SECONDS = 5
 
-# Mark entities unavailable if no notification arrives within this window
-STALE_AFTER_SECONDS = 300
+# Mark entities unavailable if no notification arrives within this window.
+# The device pushes roughly once per second, so this is ~30 missed frames.
+STALE_AFTER_SECONDS = 30
