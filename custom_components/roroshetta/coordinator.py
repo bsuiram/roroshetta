@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from bleak import BleakClient
-from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
 try:
     from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
@@ -68,20 +67,19 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         self,
         hass: HomeAssistant,
         logger: logging.Logger,
-        ble_device: BLEDevice,
         entry: RoroshettaConfigEntry,
     ) -> None:
         """Initialize the coordinator."""
-        _LOGGER.debug(
-            "Initializing Roroshetta coordinator for device %s", ble_device.address
-        )
+        address = entry.unique_id
+        assert address is not None
+        _LOGGER.debug("Initializing Roroshetta coordinator for device %s", address)
         super().__init__(
             hass=hass,
             logger=logger,
             name=DOMAIN,
             update_interval=None,
         )
-        self.ble_device = ble_device
+        self.address = address
         self.entry = entry
         self.data = RoroshettaData()
         self._client: BleakClient | None = None
@@ -118,7 +116,9 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         if self._connection_task and not self._connection_task.done():
             return
         self._stop_event.clear()
-        self._connection_task = self.hass.async_create_task(self._run_notify_loop())
+        self._connection_task = self.entry.async_create_background_task(
+            self.hass, self._run_notify_loop(), name=f"{DOMAIN} notify loop"
+        )
 
     async def async_stop(self) -> None:
         """Stop the continuous notification connection loop."""
@@ -148,8 +148,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
 
     async def _run_notify_loop(self) -> None:
         """Maintain a connection and stream notifications."""
-        address = self.entry.unique_id
-        assert address is not None
+        address = self.address
         attempt = 0
 
         while not self._stop_event.is_set():

@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components import bluetooth
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
+from homeassistant.core import Event, HomeAssistant
 
 from .const import DOMAIN
 from .coordinator import RoroshettaConfigEntry, RoroshettaDataUpdateCoordinator
@@ -25,19 +23,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: RoroshettaConfigEntry) -
     assert address is not None
     _LOGGER.debug("Roroshetta device address: %s", address)
 
-    ble_device = bluetooth.async_ble_device_from_address(hass, address)
-    if not ble_device:
-        _LOGGER.error("Could not find Roroshetta device with address %s", address)
-        raise ConfigEntryNotReady(
-            f"Could not find Roroshetta device with address {address}"
-        )
-
-    _LOGGER.debug("Found BLE device for Roroshetta: %s", ble_device.name)
-    coordinator = RoroshettaDataUpdateCoordinator(hass, _LOGGER, ble_device, entry)
+    # Deliberately no availability check here. Right after a restart the
+    # bluetooth cache is often still cold, and failing setup on that produced a
+    # spurious error every boot. The notify loop waits for the device instead.
+    coordinator = RoroshettaDataUpdateCoordinator(hass, _LOGGER, entry)
     entry.runtime_data = coordinator
 
     await coordinator.async_start_notify()
     _LOGGER.debug("Started Roroshetta coordinator")
+
+    async def _async_stop_on_shutdown(_event: Event) -> None:
+        """Drop the BLE link when HA shuts down.
+
+        The notify loop parks on a connection that HA will not tear down by
+        itself, which delays shutdown and logs a warning about tasks still
+        running after the final writes stage.
+        """
+        await coordinator.async_stop()
+
+    entry.async_on_unload(
+        hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STOP, _async_stop_on_shutdown
+        )
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _LOGGER.debug("Forwarded entry setups to platforms")

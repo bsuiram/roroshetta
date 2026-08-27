@@ -6,14 +6,26 @@ import asyncio
 import logging
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant.components import bluetooth
+from homeassistant.components.bluetooth import async_discovered_service_info
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
 from homeassistant.helpers.device_registry import format_mac
 
-from .const import DOMAIN
+from .const import DOMAIN, MANUFACTURER_ID, SERVICE_UUID
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _is_roroshetta(info: bluetooth.BluetoothServiceInfoBleak) -> bool:
+    """Match the same devices the manifest bluetooth matchers do."""
+    return (
+        SERVICE_UUID in info.service_uuids
+        or (info.name or "") == "Roroshetta Sense"
+        or MANUFACTURER_ID in info.manufacturer_data
+    )
 
 
 class RoroshettaConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -24,6 +36,45 @@ class RoroshettaConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._discovery_info: bluetooth.BluetoothServiceInfoBleak | None = None
+        self._discovered: dict[str, bluetooth.BluetoothServiceInfoBleak] = {}
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Add a device manually, for when discovery has not fired."""
+        if user_input is not None:
+            address = user_input[CONF_ADDRESS]
+            await self.async_set_unique_id(address, raise_on_progress=False)
+            self._abort_if_unique_id_configured()
+            self._discovery_info = self._discovered[address]
+            return await self.async_step_pair()
+
+        configured = self._async_current_ids()
+        self._discovered = {
+            info.address: info
+            for info in async_discovered_service_info(self.hass, connectable=True)
+            if info.address not in configured and _is_roroshetta(info)
+        }
+        _LOGGER.debug(
+            "Manual setup found %d unconfigured Roroshetta device(s)",
+            len(self._discovered),
+        )
+        if not self._discovered:
+            return self.async_abort(reason="no_devices_found")
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ADDRESS): vol.In(
+                        {
+                            address: f"{info.name or 'Roroshetta Sense'} ({address})"
+                            for address, info in self._discovered.items()
+                        }
+                    )
+                }
+            ),
+        )
 
     async def async_step_bluetooth(
         self, discovery_info: bluetooth.BluetoothServiceInfoBleak

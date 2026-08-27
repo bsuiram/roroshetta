@@ -180,14 +180,14 @@ class RoroshettaSensor(CoordinatorEntity, SensorEntity):
         _LOGGER.debug(
             "Initializing Roroshetta sensor: %s for device %s",
             description.key,
-            coordinator.ble_device.address,
+            coordinator.address,
         )
         super().__init__(coordinator)
         self.entity_description = description
         address = (
             coordinator.entry.unique_id
             or coordinator.entry.data.get(CONF_ADDRESS)
-            or coordinator.ble_device.address
+            or coordinator.address
             or coordinator.entry.entry_id
         )
         self._attr_unique_id = f"{address}_{description.key}"

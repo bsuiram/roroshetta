@@ -5,6 +5,10 @@ DOMAIN = "roroshetta"
 # Bluetooth characteristic UUID
 BEEF_CHARACTERISTIC = "0000beef-1212-efde-1523-785fef13d123"
 
+# Advertised identifiers, kept in sync with the matchers in manifest.json
+SERVICE_UUID = "0000f00d-1212-efde-1523-785fef13d123"
+MANUFACTURER_ID = 1837
+
 # Update interval in seconds
 UPDATE_INTERVAL = 60
 
