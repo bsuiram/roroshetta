@@ -6,7 +6,7 @@ A custom Home Assistant integration for the Roroshetta Sense Bluetooth environme
 
 - **Automatic Bluetooth Discovery**: Discovers Roroshetta Sense devices via Bluetooth advertising
 - **Environmental Monitoring**: Monitors temperature, humidity, CO2, TVOC, PM2.5, and more
-- **Real-time Updates**: Active polling with notification-based data updates
+- **Real-time Updates**: Holds a BLE connection open and receives pushed notifications (~1/second)
 - **Comprehensive Debug Logging**: Extensive debug logging for troubleshooting
 
 ## Installation
@@ -19,6 +19,10 @@ A custom Home Assistant integration for the Roroshetta Sense Bluetooth environme
 
 The integration is configured automatically through Bluetooth discovery. When your Roroshetta Sense device is detected, you'll see a notification in Home Assistant to set it up.
 
+Setup asks you to put the device into pairing mode. Note there is roughly a 10 second gap between
+submitting that step and the actual pairing attempt, so stay at the hood until it completes. Once
+paired the flag is stored in the config entry and never asked again.
+
 ## Sensors
 
 The integration provides the following sensors:
@@ -27,7 +31,7 @@ The integration provides the following sensors:
 - **Heat Index**: Heat index temperature in °C
 - **Humidity**: Relative humidity in %
 - **CO2**: Carbon dioxide concentration in ppm
-- **TVOC**: Total Volatile Organic Compounds in ppb
+- **TVOC**: Total Volatile Organic Compounds (reported as µg/m³; unit not yet confirmed against the app)
 - **PM2.5**: Particulate matter 2.5 in µg/m³
 - **AQI**: Air Quality Index
 - **Power**: Current power consumption in W
@@ -70,7 +74,7 @@ logger:
 1. Check debug logs for connection attempts
 2. Ensure the device is not connected to another application
 3. Verify Bluetooth permissions and range
-4. **ESP_GATT_CONN_FAIL_ESTABLISH errors**: This indicates the ESPHome Bluetooth proxy cannot establish a GATT connection. The integration will automatically retry up to 3 times and attempt pairing. Try:
+4. **ESP_GATT_CONN_FAIL_ESTABLISH errors**: This indicates the ESPHome Bluetooth proxy cannot establish a GATT connection. The integration retries indefinitely with exponential backoff. Try:
    - Restarting the ESPHome device
    - Moving the device closer to the Bluetooth proxy
    - Checking ESPHome device logs for Bluetooth issues
@@ -82,17 +86,18 @@ logger:
 1. Check if the device is sending notifications
 2. Verify the characteristic UUID is correct: `0000beef-1212-efde-1523-785fef13d123`
 3. Look for timeout messages in debug logs
-4. The integration will retry failed connections up to 3 times with exponential backoff
+4. Check the proxy's signal to the hood — below about -80 dBm, GATT connections become unreliable
+   even though advertisements still arrive
 
 ## Technical Details
 
 - **Bluetooth Service UUID**: `0000f00d-1212-efde-1523-785fef13d123`
 - **Characteristic UUID**: `0000beef-1212-efde-1523-785fef13d123`
 - **Manufacturer ID**: `1837`
-- **Update Interval**: 60 seconds
-- **Connection Handling**: Automatic retry with exponential backoff (up to 3 attempts) and Bluetooth pairing
-- **Error Recovery**: Graceful handling of Bluetooth connection failures
-- **Connection Type**: Active polling with notifications
+- **Payload**: 69 bytes, little-endian, pushed roughly once per second
+- **Connection Type**: Persistent connection with GATT notifications (push, not polling)
+- **Connection Handling**: Reconnect loop with exponential backoff capped at 30s, retried indefinitely
+- **Pairing**: Attempted once on first setup, then recorded so later restarts skip it
 
 ## Device Compatibility
 
