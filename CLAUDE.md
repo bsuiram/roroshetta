@@ -121,9 +121,11 @@ protocol from [magicus/safera-ble](https://github.com/magicus/safera-ble/discuss
 independent reverse-engineering of the same device. Two things there matter
 beyond reference value: **the hood stops advertising entirely while a central is connected**, so
 nothing else can scan it while the integration runs (disable the config entry first); and
-**writable characteristics do exist**, so BLE control of light and fan is plausible but unproven.
-Commands go to `babe` as a 4-byte LE code plus a 4-byte LE parameter. Do not touch the Nordic DFU
-service at `0000fe59-…`; it is the firmware bootloader.
+**writable characteristics do exist**, and BLE control is no longer theoretical — a command has
+audibly run the fan.
+Commands go to `babe` as a 4-byte LE code plus a 4-byte LE parameter, and **this has been tested on
+the real hood** — see "Controlling the hood" below. Do not touch the Nordic DFU service at
+`0000fe59-…`; it is the firmware bootloader.
 
 ### What the hood actually is
 
@@ -203,17 +205,41 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
   correlation of +0.66 on the idle baseline that flipped to **−0.44** during cooking.
 - Bytes 24-35 are near-constant and look like configuration or thresholds. Byte 9 and byte 52 vary
   slightly.
-- **Intermediate light and fan steps have never been observed.** @53 has only ever read 0 or 90 and
-  @56 only 0 or 30, so the `/30` scaling is an inference from two points, not a measurement. @57
-  tracks the fan (0 off, 23 on low) and is unmapped.
+- **Intermediate light and fan steps have never been observed from the hood's own controls.** Set
+  that way, @53 has only ever read 0 or 90 and @56 only 0 or 30, so the `/30` scaling is an
+  inference from two points, not a measurement. BLE presets put 1 and 2 in @53, which does not fit
+  that scaling at all — see "Controlling the hood". @57 tracks the fan (0 off, 23 on low) and is
+  unmapped.
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via
 `get_u16_le(36, 3)` despite the helper's name.
 
+## Controlling the hood
+
+`babe` is a working command channel on this firmware, confirmed 2026-08-28. `0x2002`
+(CMD_MOTOR_RAW_SPEED) **audibly ran the motor**, and `0x2005` (CMD_LIGHT_PRESET) drove `light@53`
+to match its parameter (0 → 1 → 2 → 0). `0x2006` (brightness) and `0x2004` (motor auto mode) did
+nothing observable. Full results and the command table are in `captures/gatt.md`.
+
+Two findings shape anything built on this:
+
+- **`@56` does not report BLE-commanded fan speed.** It read 30 when the fan was set at the hood's
+  own controls, but stayed 0 while a BLE command had the motor running. A fan entity would have to
+  be optimistic about its state. Byte 57 is the untested candidate for real feedback.
+- **`@53` set by preset holds 1 or 2, not the 90 seen when the light is switched at the hood**, so
+  the `/30` scaling does not apply to preset-written values, and it is still unknown whether the
+  preset actually lights the lamp — nobody was watching when it worked.
+
+**Do not test writes from a boot-time experiment.** Writing seconds after `start_notify` returned
+`[Errno 104] Connection reset by peer`, dropped the link and left every entity unavailable until a
+restart; repeated restarts compound it, because the hood accepts one central at a time and each
+restart re-takes the slot. Build an on-demand path — a service or button entity — and write from an
+established, healthy connection.
+
 ## Traps that already bit this code
 
-Two bugs here cost real debugging time and are easy to reintroduce:
+Three bugs here cost real debugging time and are easy to reintroduce:
 
 - **`asyncio.wait()` requires tasks.** Passing bare coroutines raises `TypeError: Passing coroutines
   is forbidden` on Python 3.11+. It fired every connection right after `start_notify`, got swallowed
@@ -222,9 +248,15 @@ Two bugs here cost real debugging time and are easy to reintroduce:
 - **`BleakClient.set_disconnected_callback` no longer exists** (removed in bleak 0.19). The old code
   guarded it with `hasattr`, so it silently did nothing and dropped links were never noticed. The
   callback must be passed to `establish_connection(...)` / `BleakClient(...)` at construction.
+- **`write_gatt_char` by UUID string can fail while notifications on the same service work.**
+  Writing to `"0000babe-…"` raised `BleakCharacteristicNotFoundError` on connections where
+  `start_notify` on `beef` — same service — was streaming fine, which is the signature of a partial
+  cached GATT table. Resolve the characteristic object by walking `client.services`, or write to its
+  handle (`babe` is 42).
 
-The broad `except Exception` in `_run_notify_loop` is what turned both into silent misbehaviour
-rather than a traceback. Be suspicious of it when a symptom looks like "works once, then nothing".
+The broad `except Exception` in `_run_notify_loop` is what turned the first two into silent
+misbehaviour rather than a traceback. Be suspicious of it when a symptom looks like "works once,
+then nothing".
 
 ## Verifying a change without hardware
 

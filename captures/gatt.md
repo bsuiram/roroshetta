@@ -87,6 +87,48 @@ below, so the read-back is not simply the last command sent.
 | `0x2008` | CMD_LIGHT_AUTO_MODE | auto light on/off |
 | `0x2009` | CMD_FILTER_CHANGED | filter timer reset, parameter 0 |
 
+## What has actually been tried (2026-08-28)
+
+`babe` **is** the command channel on this firmware, and the 8-byte code+parameter format is right.
+Results from writing to it, ordered by how solid the evidence is:
+
+| command | result |
+|---|---|
+| `0x2002` CMD_MOTOR_RAW_SPEED | **The motor physically ran** — heard continuously at the hood. But `fan@56` stayed 0 the whole time. |
+| `0x2005` CMD_LIGHT_PRESET | **`light@53` followed the parameter exactly**: 0 → 1 → 2 → 0. Nobody was at the hood, so whether the lamp lit is unknown. |
+| `0x2006` CMD_LIGHT_BRIGHTNESS | No effect on `@53`, with light auto mode both on and off. |
+| `0x2004` CMD_MOTOR_AUTO_MODE | No observable effect on the payload. |
+
+Two things follow from that pair of results:
+
+- **`@56` does not report BLE-commanded fan speed.** It read 30 when the fan was set from the
+  hood's own controls on 08-27, but stayed 0 while a BLE command had the motor audibly running. So
+  a fan entity built on these commands cannot read its state back from `@56` and would have to be
+  optimistic. Byte 57 is the obvious place to look for real feedback — it read 23 alongside
+  `@56`=30 on 08-27 — but has never been checked while a BLE command drove the motor.
+- **`@53` set by preset does not use the `/30` scaling.** Preset 1 and 2 put literally 1 and 2 in
+  the byte, where switching the light on at the hood put 90 there. Either `@53` holds a preset index
+  when written over BLE and a brightness otherwise, or the preset never lit the lamp at all.
+
+`babe` reads back the last command written, but reverts to `021000003c000000` after a reconnect, so
+it is a volatile command buffer rather than a settings register. Nothing written during these tests
+persisted: `dcba`, `dcbb`, `abba`, `babe` and `abd3` were all byte-identical to a pre-write snapshot
+afterwards.
+
+## How not to test writes
+
+Both of these cost a session and one of them took the integration down:
+
+- **Do not resolve `babe` by UUID string.** `write_gatt_char("0000babe-…")` raised
+  `BleakCharacteristicNotFoundError` on connections where `start_notify` on `beef` — the same
+  service — worked fine, i.e. a partial cached GATT table. Walk `client.services` and keep the
+  characteristic object, or write to its handle (42) directly.
+- **Do not write seconds after connecting.** A write fired shortly after `start_notify` returned
+  `[Errno 104] Connection reset by peer`, dropped the link, and left every entity unavailable in
+  Home Assistant until a restart. Repeated HA restarts make this worse, because the hood accepts one
+  central at a time and each restart re-takes the slot. Drive writes on demand from an established,
+  known-healthy connection — a service or button entity — not from a boot-time experiment.
+
 Every write can be verified from the notify stream a second later: this integration decodes
 `light@53`, `fan@56` and `grease_filter@59`, so a command's effect is directly observable.
 
