@@ -25,11 +25,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
+    ABBA_CHARACTERISTIC,
+    ABBA_HANDLE,
     BABE_CHARACTERISTIC,
     BABE_HANDLE,
+    DCBA_CHARACTERISTIC,
+    DCBA_HANDLE,
     BEEF_CHARACTERISTIC,
     COMMAND_MIN_INTERVAL_SECONDS,
     COMMAND_TIMEOUT_SECONDS,
+    SETTINGS_LENGTH,
     DATA_DEVICE_INFO,
     DATA_PAIRED_ONCE,
     DEVICE_WAIT_SECONDS,
@@ -148,6 +153,9 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         self._connected = False
         self._last_notification: float | None = None
         self._command_char: object | int | None = None
+        self._settings_write_char: object | int | None = None
+        self._settings_read_char: object | int | None = None
+        self._settings: bytes | None = None
         self._command_lock = asyncio.Lock()
         self._last_command: float | None = None
         _LOGGER.debug("Roroshetta coordinator initialized successfully")
@@ -225,10 +233,12 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
             sw_version=format_sw_version(values),
         )
 
-    def _resolve_command_char(self, client: BleakClient) -> object | int:
-        """Find the command characteristic once per connection.
+    def _resolve_char(
+        self, client: BleakClient, uuid: str, handle: int
+    ) -> object | int:
+        """Find a characteristic once per connection.
 
-        Looking it up by UUID string at write time has failed with
+        Looking one up by UUID string at write time has failed with
         ``BleakCharacteristicNotFoundError`` on connections whose cached GATT
         table was incomplete, even while notifications on the same service were
         streaming. Resolving the object up front avoids that, and the handle is
@@ -236,15 +246,14 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         """
         for service in client.services:
             for characteristic in service.characteristics:
-                if characteristic.uuid.lower() == BABE_CHARACTERISTIC:
+                if characteristic.uuid.lower() == uuid:
                     return characteristic
         _LOGGER.warning(
-            "Command characteristic %s not in the GATT table; falling back to "
-            "handle %s",
-            BABE_CHARACTERISTIC,
-            BABE_HANDLE,
+            "Characteristic %s not in the GATT table; falling back to handle %s",
+            uuid,
+            handle,
         )
-        return BABE_HANDLE
+        return handle
 
     async def async_send_command(self, code: int, param: int = 0) -> None:
         """Write one command to the hood.
@@ -276,7 +285,9 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
 
             target = self._command_char
             if target is None:
-                target = self._command_char = self._resolve_command_char(client)
+                target = self._command_char = self._resolve_char(
+                    client, BABE_CHARACTERISTIC, BABE_HANDLE
+                )
 
             _LOGGER.debug(
                 "Sending command 0x%04x param=%d (%s)", code, param, payload.hex()
@@ -299,6 +310,92 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
             self.data.light,
             self.data.fan,
         )
+
+    @property
+    def settings(self) -> bytes | None:
+        """Cached configuration block, or None before the first read.
+
+        Refreshed once per connection and after every write, which is enough:
+        nothing changes it except the Safera app, and an edit made there shows
+        up on the next reconnect.
+        """
+        return self._settings
+
+    async def async_read_settings(self) -> bytes:
+        """Read the whole configuration block and cache it."""
+        client = self._client
+        if client is None or not self._connected or not client.is_connected:
+            raise HomeAssistantError("Roroshetta is not connected")
+        target = self._settings_read_char
+        if target is None:
+            target = self._settings_read_char = self._resolve_char(
+                client, DCBA_CHARACTERISTIC, DCBA_HANDLE
+            )
+        async with self._command_lock:
+            try:
+                async with asyncio.timeout(COMMAND_TIMEOUT_SECONDS):
+                    self._settings = bytes(await client.read_gatt_char(target))
+                    return self._settings
+            except Exception as err:
+                raise HomeAssistantError(
+                    f"Failed to read settings: {type(err).__name__}: {err}"
+                ) from err
+
+    async def async_write_setting(self, offset: int, value: int) -> int:
+        """Write one byte of the configuration block and read it back.
+
+        Writes are two bytes to the settings characteristic — the offset into
+        the block, then the value. The block also holds stove-guard
+        configuration, so this is deliberately low level and has no notion of
+        which offsets are safe to touch; callers are expected to know.
+
+        Returns the value actually stored, read back afterwards, so a caller can
+        tell a silently ignored write from one that took.
+        """
+        client = self._client
+        if client is None or not self._connected or not client.is_connected:
+            raise HomeAssistantError(
+                "Roroshetta is not connected, so the setting was not written"
+            )
+        if not 0 <= offset < SETTINGS_LENGTH:
+            raise HomeAssistantError(
+                f"Setting offset {offset} is outside the {SETTINGS_LENGTH}-byte block"
+            )
+        if not 0 <= value <= 0xFF:
+            raise HomeAssistantError(f"Setting value {value} is not a byte")
+
+        async with self._command_lock:
+            if self._last_command is not None:
+                gap = self.hass.loop.time() - self._last_command
+                if gap < COMMAND_MIN_INTERVAL_SECONDS:
+                    await asyncio.sleep(COMMAND_MIN_INTERVAL_SECONDS - gap)
+
+            target = self._settings_write_char
+            if target is None:
+                target = self._settings_write_char = self._resolve_char(
+                    client, ABBA_CHARACTERISTIC, ABBA_HANDLE
+                )
+            _LOGGER.debug("Writing setting @%d = %d", offset, value)
+            try:
+                async with asyncio.timeout(COMMAND_TIMEOUT_SECONDS):
+                    await client.write_gatt_char(
+                        target, bytes([offset, value]), response=True
+                    )
+            except Exception as err:
+                raise HomeAssistantError(
+                    f"Failed to write setting @{offset}={value}: "
+                    f"{type(err).__name__}: {err}"
+                ) from err
+            finally:
+                self._last_command = self.hass.loop.time()
+
+        settings = await self.async_read_settings()
+        self.async_update_listeners()
+        stored = settings[offset]
+        _LOGGER.info(
+            "Wrote setting @%d = %d, device reports %d", offset, value, stored
+        )
+        return stored
 
     @property
     def device_available(self) -> bool:
@@ -423,7 +520,15 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
                 _LOGGER.debug("Connected to Roroshetta device at %s", address)
 
                 await self._async_read_device_info(client)
-                self._command_char = self._resolve_command_char(client)
+                self._command_char = self._resolve_char(
+                    client, BABE_CHARACTERISTIC, BABE_HANDLE
+                )
+                self._settings_write_char = self._resolve_char(
+                    client, ABBA_CHARACTERISTIC, ABBA_HANDLE
+                )
+                self._settings_read_char = self._resolve_char(
+                    client, DCBA_CHARACTERISTIC, DCBA_HANDLE
+                )
                 if not self._paired_once and hasattr(client, "pair"):
                     await client.pair()
 
@@ -444,6 +549,15 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
                     "Started notification listener for characteristic %s",
                     BEEF_CHARACTERISTIC,
                 )
+
+                # After _set_connected, which async_read_settings requires: it
+                # refuses to read while the coordinator still counts as
+                # disconnected.
+                try:
+                    await self.async_read_settings()
+                    self.async_update_listeners()
+                except Exception as err:  # noqa: BLE001 - never block streaming
+                    _LOGGER.warning("Could not read the settings block: %s", err)
 
                 if not self._paired_once:
                     self._paired_once = True
@@ -508,6 +622,10 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
                 # The characteristic object belongs to this connection's GATT
                 # table; keeping it would write through a dead client.
                 self._command_char = None
+                self._settings_write_char = None
+                self._settings_read_char = None
+                # Keep the cached block: the numbers stay meaningful across a
+                # reconnect, and it is refreshed as soon as we are back.
                 self._set_connected(False)
 
             if self._stop_event.is_set():

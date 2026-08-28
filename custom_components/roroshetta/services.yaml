@@ -32,3 +32,34 @@ send_command:
       selector:
         device:
           integration: roroshetta
+
+write_setting:
+  name: Write setting
+  description: >-
+    Write one byte of the hood's 200-byte configuration block, then read it back
+    to confirm. Low level on purpose — most of the block is still unmapped and
+    it also holds stove-guard configuration. See captures/gatt.md.
+  fields:
+    offset:
+      name: Offset
+      description: >-
+        Byte offset into the settings block, 0-199. Known: 86-92 are the Motor 1
+        ventilation presets (levels 0-4 then boost), 93-99 the Motor 2 presets.
+      required: true
+      example: 87
+      selector:
+        text:
+    value:
+      name: Value
+      description: Byte value to store, 0-255. Ventilation presets scale 0-254.
+      required: true
+      example: 23
+      selector:
+        text:
+    device_id:
+      name: Device
+      description: Only needed if more than one hood is set up.
+      required: false
+      selector:
+        device:
+          integration: roroshetta

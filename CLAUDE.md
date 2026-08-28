@@ -251,9 +251,9 @@ Things that shaped the implementation, all learned the hard way:
   steps. The fan entity uses `@57`, so it has real feedback; the `fan_level` *sensor* still reads
   `@56` and will sit at 0 whenever HA is driving the fan. That is not a bug.
 - **Above roughly 180 the motor is not audibly different**, though `@57` still reports the value.
-- **The Kelvin range on the light is invented.** The hood has no notion of colour temperature —
-  `@55` is a warm-to-cool slider — so `LIGHT_MIN_KELVIN`/`LIGHT_MAX_KELVIN` exist to drive the HA UI
-  and are not a measurement.
+- **The Kelvin mapping is measured, not assumed.** The app showed 2790 K, 2970 K and 2943 K for
+  stored preset bytes 10, 30 and 27 — an exact fit for **`K = 2700 + byte × 9`**. So the lamp runs
+  2700 K to 4995 K in 9 K steps, and a requested colour snaps to the nearest step.
 
 ### Auto mode, and byte 60
 
@@ -274,6 +274,37 @@ being switched by hand.
 Finding it needed a known starting state. The earlier attempt diffed the settings blocks around
 enabling auto in the app and saw nothing, because our own probes had already left both autos armed —
 the app changed nothing. Repeating it from a known-disarmed state made the byte obvious.
+
+### The settings block
+
+`dcba` returns a 200-byte configuration block and `abba` writes into it: **two bytes, an offset then
+a value**. That was found the same way as the colour command — `abba` retains the last write, so
+after editing a ventilation preset in the Safera app it held `[87, 22]`, and `dcba` byte 87 had
+become 22.
+
+Offsets confirmed against the app's own screens:
+
+| offsets | what |
+|---|---|
+| `86-91` | Motor 1 ventilation presets: level 0, 1, 2, 3, 4, boost. Fraction of **254** |
+| `93-98` | Motor 2 presets, same order (Motor 2 is the external blower, unused on this hood) |
+| `82-84` | ventilation automation limits, packed as `(max << 4) \| min` — active cooking, after-cooking, no cooking |
+| `103-105` | light preset brightness, presets 1-3. Fraction of **255** |
+| `107-109` | light preset colour, presets 1-3, as `2700 + byte × 9` Kelvin |
+| `111-114` | which light preset each automatic situation uses |
+
+Ventilation sensitivity is still unlocated; `@71`, `@133`, `@134` and `@149` all read 50 and any of
+them could be it. One app edit plus a diff would settle it.
+
+`coordinator.async_read_settings()` caches the block, refreshed **once per connection and after
+every write** — nothing else changes it, so an edit made in the app appears on the next reconnect.
+`async_write_setting()` writes one byte and reads it back, returning what actually landed so a
+silently ignored write is distinguishable from one that took. The `number` platform builds eleven
+entities on that: five Motor 1 presets and brightness plus colour for the three light presets.
+
+**The read is ordered after `_set_connected(True)` deliberately** — `async_read_settings` refuses to
+run while the coordinator still counts as disconnected, so reading earlier in the connect path fails
+every time.
 
 ### Writing commands
 

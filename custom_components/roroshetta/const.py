@@ -4,6 +4,7 @@ DOMAIN = "roroshetta"
 
 # Services
 SERVICE_SEND_COMMAND = "send_command"
+SERVICE_WRITE_SETTING = "write_setting"
 
 # Bluetooth characteristic UUIDs
 BEEF_CHARACTERISTIC = "0000beef-1212-efde-1523-785fef13d123"
@@ -17,6 +18,31 @@ BABE_CHARACTERISTIC = "0000babe-1212-efde-1523-785fef13d123"
 # service were streaming fine, so the handle is used if the lookup comes up
 # empty. Verified against firmware 13; re-check if the hood is ever updated.
 BABE_HANDLE = 42
+
+# Settings channel. Reads give the whole 200-byte configuration block; writes
+# are two bytes, an offset into that block then the value to store there.
+# Confirmed by watching the Safera app edit a ventilation preset: abba held
+# [87, 22] afterwards, and dcba byte 87 had become 22.
+DCBA_CHARACTERISTIC = "0000dcba-1212-efde-1523-785fef13d123"
+ABBA_CHARACTERISTIC = "0000abba-1212-efde-1523-785fef13d123"
+DCBA_HANDLE = 38
+ABBA_HANDLE = 36
+SETTINGS_LENGTH = 200
+
+# Ventilation preset tables inside the settings block, one byte per step for
+# levels 0, 1, 2, 3, 4 and boost. Values are 0-254, not 0-255: the Safera app
+# shows percentages of 254.
+# Offsets inside the settings block, all confirmed against the Safera app.
+SETTINGS_MOTOR1_PRESETS = 86  # levels 0-4 then boost
+SETTINGS_MOTOR2_PRESETS = 93  # same order
+SETTINGS_VENT_LIMITS = 82  # 3 bytes, (max << 4) | min, active/after/no cooking
+SETTINGS_LIGHT_BRIGHTNESS = 103  # presets 1-3
+SETTINGS_LIGHT_COLOR = 107  # presets 1-3
+SETTINGS_LIGHT_AUTOMATION = 111  # which preset each automatic situation uses
+
+# Ventilation presets are stored as a fraction of 254; light brightness of 255.
+FAN_PRESET_MAX = 254
+LIGHT_PRESET_BRIGHTNESS_MAX = 255
 
 # Advertised identifiers, kept in sync with the matchers in manifest.json
 SERVICE_UUID = "0000f00d-1212-efde-1523-785fef13d123"
@@ -68,11 +94,13 @@ AUTO_MASK_LIGHT = 0x02
 LIGHT_PRESET_OFF = 0
 LIGHT_PRESET_ON = 1
 
-# The colour channel is a warm-to-cool slider, 0-255. The hood does not report
-# a colour temperature anywhere, so these Kelvin bounds are a plausible mapping
-# for the Home Assistant UI, not a measurement. Calibrate if it ever matters.
-LIGHT_MIN_KELVIN = 2700
-LIGHT_MAX_KELVIN = 6500
+# The colour channel is a warm-to-cool slider, 0-255, and the mapping to Kelvin
+# is measured rather than assumed: the app showed 2790 K, 2970 K and 2943 K for
+# stored preset bytes 10, 30 and 27, an exact fit for 2700 + byte * 9.
+LIGHT_KELVIN_BASE = 2700
+LIGHT_KELVIN_PER_STEP = 9
+LIGHT_MIN_KELVIN = LIGHT_KELVIN_BASE
+LIGHT_MAX_KELVIN = LIGHT_KELVIN_BASE + 255 * LIGHT_KELVIN_PER_STEP
 
 # The motor takes 0-255. Anything above roughly 180 was not audibly different,
 # though byte 57 does report the higher values back.

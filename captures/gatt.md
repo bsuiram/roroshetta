@@ -134,9 +134,31 @@ Establishing a known-disarmed state first is what made it fall out.
 panel, and stays 0 the whole time a BLE speed command has the motor running. `@57` is the actual
 motor speed in the same 0-255 units the command takes.
 
+### The settings block, and how to write it
+
+`dcba` reads 200 bytes of configuration; `abba` writes into it as **two bytes, offset then value**.
+Confirmed by writing `[87, 60]` and watching the Safera app's Motor 1 level-1 preset change from 9%
+to 24%, then putting it back.
+
+| offsets | what |
+|---|---|
+| `86-91` | Motor 1 ventilation presets: level 0, 1, 2, 3, 4, boost. Fraction of 254 |
+| `93-98` | Motor 2 presets, same order |
+| `82-84` | ventilation automation limits, `(max << 4) \| min`: active cooking, after-cooking, no cooking |
+| `103-105` | light preset brightness, presets 1-3. Fraction of 255 |
+| `107-109` | light preset colour, presets 1-3 |
+| `111-114` | which light preset each automatic situation uses |
+
+The light colour bytes gave an exact Kelvin mapping: the app showed 2790 K, 2970 K and 2943 K for
+stored 10, 30 and 27, fitting **`K = 2700 + byte × 9`** perfectly. So the lamp spans 2700-4995 K in
+9 K steps.
+
+Ventilation sensitivity is not located yet — `@71`, `@133`, `@134` and `@149` all read 50, matching
+the app's "50%", and only an app edit plus a diff will say which.
+
 ### Reading the app's own commands
 
-`babe` holds the **last command written to it**, by anyone. Disabling the config entry, driving a
+`babe` and `abba` both hold the **last thing written to them**, by anyone. Disabling the config entry, driving a
 control from the Safera app, then re-enabling and reading `babe` reveals exactly what the app sent.
 That is how `0x2007` was found. It reverts to `021000003c000000` after a reconnect, so it is a
 volatile buffer rather than a settings register.

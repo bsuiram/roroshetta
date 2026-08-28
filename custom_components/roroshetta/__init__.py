@@ -13,13 +13,14 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN, SERVICE_SEND_COMMAND
+from .const import DOMAIN, SERVICE_SEND_COMMAND, SERVICE_WRITE_SETTING
 from .coordinator import RoroshettaConfigEntry, RoroshettaDataUpdateCoordinator
 
 PLATFORMS = [
     Platform.BUTTON,
     Platform.FAN,
     Platform.LIGHT,
+    Platform.NUMBER,
     Platform.SENSOR,
     Platform.SWITCH,
 ]
@@ -35,6 +36,14 @@ def _coerce_code(value: object) -> int:
         return int(value, 0)
     raise vol.Invalid(f"Invalid command code: {value!r}")
 
+
+WRITE_SETTING_SCHEMA = vol.Schema(
+    {
+        vol.Required("offset"): _coerce_code,
+        vol.Required("value"): _coerce_code,
+        vol.Optional(ATTR_DEVICE_ID): cv.string,
+    }
+)
 
 SEND_COMMAND_SCHEMA = vol.Schema(
     {
@@ -53,6 +62,30 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     device at call time and reports clearly if there is none.
     """
 
+    def _resolve_coordinator(
+        hass: HomeAssistant, call: ServiceCall
+    ) -> RoroshettaDataUpdateCoordinator:
+        """Pick the coordinator a service call is aimed at."""
+        entries = [
+            entry
+            for entry in hass.config_entries.async_loaded_entries(DOMAIN)
+            if isinstance(
+                getattr(entry, "runtime_data", None), RoroshettaDataUpdateCoordinator
+            )
+        ]
+        if device_id := call.data.get(ATTR_DEVICE_ID):
+            device = dr.async_get(hass).async_get(device_id)
+            if device is None:
+                raise HomeAssistantError(f"Unknown device_id {device_id}")
+            entries = [e for e in entries if e.entry_id in device.config_entries]
+        if not entries:
+            raise HomeAssistantError("No loaded Roroshetta device to send to")
+        if len(entries) > 1:
+            raise HomeAssistantError(
+                "Several Roroshetta devices are set up; pass device_id to pick one"
+            )
+        return entries[0].runtime_data
+
     async def _async_send_command(call: ServiceCall) -> None:
         """Write one raw command to the hood's command characteristic.
 
@@ -61,36 +94,37 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         demand against a live connection instead of from a redeploy. See
         captures/gatt.md for what the known codes do.
         """
-        entries = [
-            entry
-            for entry in hass.config_entries.async_loaded_entries(DOMAIN)
-            if isinstance(
-                getattr(entry, "runtime_data", None), RoroshettaDataUpdateCoordinator
-            )
-        ]
+        coordinator = _resolve_coordinator(hass, call)
+        await coordinator.async_send_command(call.data["code"], call.data["param"])
 
-        if device_id := call.data.get(ATTR_DEVICE_ID):
-            device = dr.async_get(hass).async_get(device_id)
-            if device is None:
-                raise HomeAssistantError(f"Unknown device_id {device_id}")
-            entries = [e for e in entries if e.entry_id in device.config_entries]
+    async def _async_write_setting(call: ServiceCall) -> None:
+        """Write one byte of the hood's configuration block.
 
-        if not entries:
-            raise HomeAssistantError("No loaded Roroshetta device to send to")
-        if len(entries) > 1:
-            raise HomeAssistantError(
-                "Several Roroshetta devices are set up; pass device_id to pick one"
-            )
-
-        await entries[0].runtime_data.async_send_command(
-            call.data["code"], call.data["param"]
+        Low level on purpose: the preset tables are mapped but most of the block
+        is not, and it also holds stove-guard configuration. See
+        captures/gatt.md before writing an offset you have not verified.
+        """
+        coordinator = _resolve_coordinator(hass, call)
+        stored = await coordinator.async_write_setting(
+            call.data["offset"], call.data["value"]
         )
+        if stored != call.data["value"]:
+            raise HomeAssistantError(
+                f"Setting @{call.data['offset']} reads back as {stored}, "
+                f"not the {call.data['value']} that was written"
+            )
 
     hass.services.async_register(
         DOMAIN,
         SERVICE_SEND_COMMAND,
         _async_send_command,
         schema=SEND_COMMAND_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_WRITE_SETTING,
+        _async_write_setting,
+        schema=WRITE_SETTING_SCHEMA,
     )
     return True
 
