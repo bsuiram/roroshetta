@@ -57,22 +57,40 @@ the device into bootloader mode.
 
 ## What this means for control
 
-**Writable characteristics exist**, so controlling the hood over BLE is plausible. Four of them:
-`abba`, `babe`, `abd3` and `abd2`.
+**Writable characteristics exist and the command protocol is known.** The
+[magicus/safera-ble](https://github.com/magicus/safera-ble/discussions/1) project reverse-engineered
+it independently; the naming below is theirs, cross-checked against this hood where possible.
 
-Best guesses, all unverified:
+| UUID | their name | purpose |
+|---|---|---|
+| `beef` | SENSOR_REPORT | the sensor stream this integration decodes |
+| `babe` | DEVICE_COMMAND | **commands go here** |
+| `dcba` | READ_SETTINGS | 200-byte configuration block |
+| `abba` | WRITE_SETTINGS | configuration writes |
+| `abd1` | CLOUD_WIFI_STATUS | WiFi/cloud state — this is where the SSID appears |
+| `abdf` | DAY_STATISTICS | daily statistics |
+| `abcf` | EVENT_LOG | device event history |
+| `abd2` | GDT_DATA | hood-specific data |
+| `abd3` | GDT_COMMAND | hood commands |
 
-- **`abba` (2 bytes) and `babe` (8 bytes)** are the plausible control surface for light and fan.
-  They are small, writable and readable, and `babe`'s `02 10 00 00 | 3c 00 00 00` reads naturally as
-  two little-endian u32s — 4098 and 60 — which looks like settings rather than a live command.
-- **`abd1` / `abd2` / `abd3` are almost certainly WiFi provisioning**, not hood control: `abd1`
-  holds the SSID, `abd3` is a 32-byte writable field the size of a WPA passphrase, and `abd2` is a
-  512-byte buffer the right shape for a network scan list. **Writing to `abd3` could overwrite the
-  hood's WiFi credentials.**
-- `dcba` / `dcbb` are read-only and overlap by a 2-byte shift, so they are probably the same config
-  block exposed two ways. Worth decoding — thresholds for the stove guard may live here.
+Commands written to `babe` are 8 bytes: **a 4-byte little-endian code followed by a 4-byte
+little-endian parameter.** That matches the shape read back from this hood at idle,
+`02100000 3c000000` — code `0x1002`, parameter 60. Note `0x1002` is not one of the command codes
+below, so the read-back is not simply the last command sent.
 
-**Do not guess writes.** This device switches mains power to a cooktop, one writable characteristic
-is the firmware bootloader and another probably holds WiFi credentials. The safe path is an Android
-HCI snoop capture of the Safera app driving the controls, which yields the exact handle and payload
-per action. See the debugging notes in `CLAUDE.md`.
+| code | command | parameter |
+|---|---|---|
+| `0x2002` | CMD_MOTOR_RAW_SPEED | fan speed, 0-255, 0 = off |
+| `0x2004` | CMD_MOTOR_AUTO_MODE | auto fan on/off |
+| `0x2005` | CMD_LIGHT_PRESET | light preset |
+| `0x2006` | CMD_LIGHT_BRIGHTNESS | light brightness |
+| `0x2008` | CMD_LIGHT_AUTO_MODE | auto light on/off |
+| `0x2009` | CMD_FILTER_CHANGED | filter timer reset, parameter 0 |
+
+Every write can be verified from the notify stream a second later: this integration decodes
+`light@53`, `fan@56` and `grease_filter@59`, so a command's effect is directly observable.
+
+**The one thing not to touch is the Nordic DFU service** at `0000fe59-…`, which puts the device
+into bootloader mode. Beyond that, prefer the documented command codes above to guessing: this
+device switches mains power to a cooktop, and `abba` (WRITE_SETTINGS) reaches the configuration
+block where the stove guard's thresholds plausibly live.

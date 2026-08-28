@@ -44,14 +44,25 @@ Captures taken so far, for reference:
 | offset | field | evidence |
 |---|---|---|
 | 2-3 | *(mislabelled `heat_index`)* | Ambient temp @0 moved 21.5→21.8 °C all session while this went 23.4→28.0, corr +0.39 with hob power. Not a heat index — a second heat measurement, probably the stove guard's IR sensor. Also jumps when a person is in front of the hood. |
-| 43 | *(unmapped)* | Cooking-session latch. 0→2 on the exact frame power went nonzero; cleared to 0 at 11:54:42, ~15 min after the hob went off. |
-| 44 | `alarm_level` | Interlock integrator, gated on hob power: mean 1.58 with the hob on vs 0.00 with it off (only 3 of 854 hob-off frames nonzero). Climbed 1→17 over ~65 s unattended, driven to 0 in 19 s by a presence spike. 83% of increments happen at `activity` ≤ 1. Steps of 1 about every 3 s. Peak ever seen 35 — **not** a percentage. |
+| 43 | `Activity Type` | Cooking-session latch. 0→2 on the exact frame power went nonzero; cleared to 0 at 11:54:42, ~15 min after the hob went off. |
+| 44 | `alarm_level` | Interlock integrator, gated on hob power: mean 1.58 with the hob on vs 0.00 with it off (only 3 of 854 hob-off frames nonzero). Climbed 1→17 over ~65 s unattended, driven to 0 in 19 s by a presence spike. 83% of increments happen at `activity` ≤ 1. Steps of 1 about every 3 s. Peak ever seen 35; `magicus/safera-ble` calls it a percentage and our data neither confirms nor contradicts that. |
 | 45 | `activity` | Presence detector. Impulses up, then **every decrement is exactly −2** — 70/70 in the egg session, 594/594 on 08-27. Peak seen 100. |
 | 46-47 | `power` | Real mains watts, u16 LE. 0→2660 W, all values multiples of 20 W, nonzero for exactly the hob-on span. Read a constant 0 in every earlier capture only because the hob was never on during one. |
+| 6-7 | ambient light | `value / 32` lux per `magicus/safera-ble`. Reads 25-157 lux (mean 108) on our frames. Dips when someone is at the hob — 114 lux with nobody there vs 100 with someone present — i.e. shadowing. Neither parser decodes it. |
 | 53 | `light` | 0 with light off, 90 with light on → `/30` = 3.0. Intermediate steps never observed. |
 | 56 | `fan` | 30 with fan on low → `/30` = 1.0. |
 | 57 | *(unmapped)* | 0 with the fan off, 23 with it on low, in every capture. Fan-related. |
 | 59 | `grease_filter` | Constant within a capture, but the recorder shows 20 → 21 (08-27 14:43 UTC) → 22 (08-28 05:44 UTC): ~1 per 15 h, ~62 days for 0→100. Filter saturation in percent. |
+
+## External reference
+
+[magicus/safera-ble](https://github.com/magicus/safera-ble/discussions/1) is an independent
+reverse-engineering of the same protocol, and is where the command codes in `gatt.md`, the ambient
+light scaling and the `Activity Type` name come from. It agrees with the measurements here on
+`@0-1`, `@2-3` (which it calls Surface Temperature, confirming that `heat_index` is misnamed),
+`@4-5`, `@10-11`, `@15-16`, `@17-18`, `@43`, `@44`, `@45` and `@46-47`. It disagrees on `@12-13`
+and `@24`, where our frames say it is wrong, and its table stops at offset 47 — it describes a
+"54+ byte" payload where ours are 69 bytes. Probably an older firmware.
 
 ## How the safety interlock works
 
@@ -67,8 +78,7 @@ this on every count except the trip itself.
 - **Byte 60 is not a light/fan state.** On 08-27 it read 3 idle / 1 light / 0 fan across 1067
   frames, which looked airtight; it then sat constant at 3 through the whole 08-28 session with
   light and fan on. Bytes 61-68 stay static at `00 …  00 ff`.
-- **Bytes 6-7**, a live u16 LE both parsers ignore, correlate with `tvoc` at +0.66 on the idle
-  baseline and **−0.44** during cooking. The sign is unstable, so the raw-MOX-reading lead is dead.
+- ~~Bytes 6-7~~ **resolved**: ambient light, `value / 32` lux — see the table above.
 - Whether the light has intermediate brightness steps — only 0 and 90 have ever been seen at @53,
   and only 0 and 30 at @56, so the `/30` scaling rests on two points.
 - Whether the auto-on of light and fan when the hob starts is really automatic. It is consistent

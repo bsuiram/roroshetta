@@ -28,9 +28,9 @@ paired the flag is stored in the config entry and never asked again.
 The integration provides the following sensors:
 
 - **Temperature**: Ambient temperature in °C
-- **Heat Index**: Name inherited from the original decode and probably wrong. It tracks hob heat
-  (23.4 → 28.0 °C across a cooking session while ambient moved 0.3 °C) and is most likely the stove
-  guard's IR sensor rather than a computed heat index
+- **Heat Index**: Misnamed — this is the hob's **surface temperature**, not a computed heat index.
+  It tracked 23.4 → 28.0 °C across a cooking session while ambient moved 0.3 °C, and an independent
+  reverse-engineering of the protocol labels the same field Surface Temperature
 - **Humidity**: Relative humidity in %
 - **CO2**: Carbon dioxide concentration in ppm
 - **TVOC**: Total Volatile Organic Compounds (reported as µg/m³; unit not yet confirmed against the app)
@@ -45,7 +45,7 @@ The integration provides the following sensors:
 - **Activity Level**: Presence at the hob — spikes when someone is there, then decays steadily to 0
 - **Alarm Level**: Stove-guard hazard integrator. Rises while the hob draws power, is knocked
   back down by activity, and triggers the cooktop cut-off if it passes a threshold with nobody
-  present. Raw units, not a percentage — the threshold is not known
+  present. The trip threshold is not known; the highest value ever observed is 35
 
 ## Debug Logging
 
