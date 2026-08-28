@@ -104,31 +104,86 @@ push data → sensor entities read from `coordinator.data`.
 
 **Real frames are 69 bytes, arriving about once per second.** `test.py`'s docstring claims "≈ 54
 bytes" and `_parse_data` guards on `len(data) < 60` — both were written before anyone measured, and
-both are wrong. Highest mapped offset is 59, so **bytes 60-68 are entirely unexplored**.
+both are wrong. Highest mapped offset is 59; bytes 60-68 are still largely unexplained.
 
 `_parse_data` decodes the frame little-endian by hardcoded offsets, mirroring `decode_env1` in
-`test.py`. The offsets were reverse-engineered from dumps against app screenshots and several are
-still marked unsure (`alarm_level` @44, `activity` @45, `grease_filter` @59). **Keep `test.py` and
-`coordinator._parse_data` in sync** — if you change a scaling factor or offset in one, change it in
-the other, and validate against a live device before trusting a new mapping.
+`test.py`. **Keep `test.py` and `coordinator._parse_data` in sync** — if you change a scaling factor
+or offset in one, change it in the other, and validate against a live device before trusting a new
+mapping.
 
 To capture frames, switch on the dedicated frame logger
 (`custom_components.roroshetta.coordinator.frames` → `debug` via the `logger.set_level` service)
-and grep the core log for `coordinator.frames`. See `captures/` for tooling, a stored idle baseline,
-and a per-byte analyser that labels each offset with the field currently read from it.
+and grep the core log for `coordinator.frames`. See `captures/` for tooling, stored captures, and a
+per-byte analyser that labels each offset with the field currently read from it.
 
-What the idle baseline (51 frames, 2026-08-27) established:
+`captures/gatt.md` holds the hood's full GATT table, dumped 2026-08-28. Two things there matter
+beyond reference value: **the hood stops advertising entirely while a central is connected**, so
+nothing else can scan it while the integration runs (disable the config entry first); and
+**writable characteristics do exist**, so BLE control of light and fan is plausible but unproven.
+One of them is the Nordic DFU bootloader and another probably holds WiFi credentials — do not
+write experimentally, capture what the Safera app sends instead.
 
-- **Bytes 60-68 are static** at `03 00 00 00 00 00 00 00 ff` with the hood idle — likely a trailer
-  or status block rather than live sensor data. Not yet observed under load.
-- **Bytes 6-7 are a live 16-bit LE value the parser ignores entirely.** It drifts smoothly
-  (~24000-33000) and is unambiguously little-endian: big-endian reads as noise. It correlates with
-  `tvoc` at +0.66 and `temperature` at -0.50, which is the signature of a raw MOX gas reading, but
-  tVOC barely moved during the capture so that is a lead, not a conclusion.
-- Bytes 24-35 (`15 01 64 ff 01 ae ff 1e 00 02 00 00`) are constant and look like configuration or
-  thresholds. Bytes 9 and 52 vary slightly. `uptime` is confirmed as a 3-byte LE counter.
-- `fan`, `light`, `power`, `activity` and `alarm_level` all read zero at idle, so **the unsure
-  offsets cannot be confirmed without someone operating the hood** while frames are captured.
+### What the hood actually is
+
+Safera Sense is a **stove guard first** and an air-quality sensor second. Its safety function cuts
+power to the cooktop when something on the plate stays too hot for too long. That subsystem is what
+most of the unexplained bytes belong to, and knowing it is what made them decodable — read the
+frame as "hazard interlock plus environment", not "hood telemetry".
+
+The mechanism, confirmed against a live cooking session: **`alarm_level` accumulates while the hob
+draws power, `activity` (presence at the hob) knocks it back down, and an alarm fires if
+`alarm_level` passes a threshold with no `activity`.**
+
+### Confirmed by the 2026-08-28 cooking session
+
+A full session (frying an egg, 2871 frames, 53 min, hob 11:31:41–11:39:57) settled the three
+offsets that were previously marked unsure, and corrected one that was wrongly assumed dead:
+
+- **`power` @46-47 is genuinely mains power in watts, u16 LE.** 0 → 2660 W, every observed value a
+  multiple of 20 W, nonzero for exactly the span the hob was on and zero on both sides. It had read
+  a constant 0 in every earlier capture **only because nobody had ever turned the hob on while
+  capturing** — do not conclude a field is dead from idle data alone.
+- **`alarm_level` @44 is the interlock integrator, gated on hob power.** Mean 1.58 while the hob
+  drew power vs 0.00 while it did not; of 854 hob-off frames only 3 were nonzero, all value 1 and
+  all the tail of a decay. It climbed 1 → 17 over ~65 s of unattended cooking, then a presence
+  spike drove it to 0 within 19 s. 83% of its increments occur while `activity` ≤ 1. It ramps and
+  decays in steps of 1 at roughly 3 s intervals. **Peak ever observed is 35, so the trip threshold
+  and the scale are still unknown** — it is not a percentage.
+- **`activity` @45 is a presence detector with strict linear decay.** Impulse up on presence, then
+  **every single decrement is exactly −2** (70 of 70 in this session, 594 of 594 on 2026-08-27).
+  Peak observed 100.
+- **`grease_filter` @59 is a slow monotonic counter.** Constant within any one capture, but the HA
+  recorder shows 20 → 21 (08-27 14:43 UTC) → 22 (08-28 05:44 UTC): about 1 per 15 h, extrapolating
+  to ~62 days for 0 → 100. Consistent with filter saturation in percent.
+- **Byte 43 is an unmapped cooking-session latch.** It flipped 0 → 2 on the exact frame `power`
+  first went nonzero, held at 2 through the whole session, and cleared back to 0 at 11:54:42 —
+  ~15 min after the hob went off and ~10 min after the fan stopped. Not decoded by either parser.
+- **`heat_index` @2-3 is misnamed.** Ambient `temperature` @0-1 moved only 21.5 → 21.8 °C across the
+  session while @2-3 went 23.4 → 28.0 and correlates with hob power at +0.39. A true heat index at
+  21.7 °C / 52% RH is ~21.7, not 28. @2-3 is a second heat measurement, most plausibly the stove
+  guard's IR sensor aimed at the hob — which also explains why it jumps when a person stands in
+  front of it. The name is inherited from `test.py` and should not be trusted.
+- Light and fan came on **one second after** the hob drew power and switched off together 4.5 min
+  after it stopped, which looks like auto-start and run-on rather than button presses. Data cannot
+  distinguish the two; do not assume a control change was user-initiated.
+
+### Still open
+
+- **Byte 60 is not an operating-state enum.** On the 2026-08-27 capture it read 3 idle / 1 light on
+  / 0 fan on, which looked deterministic across 1067 frames. It then sat constant at 3 through the
+  entire 08-28 session *including* light and fan on. Whatever drives it, it is not light or fan
+  state. Bytes 61-68 remain static at `00 00 00 00 00 00 00 ff`.
+- **No alarm trip has ever been observed**, so `alarm_level`'s threshold and units are unknown, and
+  it is unclear whether any field reports the power actually being cut. The hood's self-test is the
+  cheap way to exercise this without a genuinely dangerous pan.
+- **Bytes 6-7 are a live 16-bit LE value both parsers ignore.** The idle baseline put it at +0.66
+  with `tvoc`; the cooking session puts it at **−0.44** with the same field, so the sign is not
+  stable and the MOX-gas-reading lead does not survive. Unexplained.
+- Bytes 24-35 are near-constant and look like configuration or thresholds. Byte 9 and byte 52 vary
+  slightly.
+- **Intermediate light and fan steps have never been observed.** @53 has only ever read 0 or 90 and
+  @56 only 0 or 30, so the `/30` scaling is an inference from two points, not a measurement. @57
+  tracks the fan (0 off, 23 on low) and is unmapped.
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via

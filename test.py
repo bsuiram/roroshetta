@@ -66,12 +66,12 @@ def decode_env1(data: bytes):
     co2           = get_u16_le(15,2)
     tvoc          = get_u16_le(17,2)
     uptime        = get_u16_le(36,3)
-    alarm_level   = get_u16_le(44,1) # unsure
-    activity      = get_u16_le(45,1) # unsure
+    alarm_level   = get_u16_le(44,1) # interlock integrator, not a %; see captures/README.md
+    activity      = get_u16_le(45,1) # presence; impulse then strict -2/frame decay
     power         = get_u16_le(46,2)
     light         = get_u16_le(53,1) / 30
     fan           = get_u16_le(56,1) / 30
-    grease_filter = get_u16_le(59,1) # unsure
+    grease_filter = get_u16_le(59,1) # filter saturation %, climbs ~1 per 15 h
     
     if output_env:
         env = {
@@ -86,7 +86,7 @@ def decode_env1(data: bytes):
             "Light (level)": round(light),
             "Fan (level)": round(fan),
             "Activity": activity,
-            "Alarm level (%)": alarm_level,
+            "Alarm level": alarm_level,
             "Power (W)": power,
             "Uptime (s)": uptime
         }

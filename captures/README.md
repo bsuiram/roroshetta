@@ -35,16 +35,41 @@ Captures taken so far, for reference:
 - `2026-08-27-light-fan.tsv` — light toggled and fan run on low. Broken up by several BLE
   disconnects, so it has gaps; cross-check against HA's own recorder history
   (`/api/history/period`), which is more complete than sampling the debug log.
+- `2026-08-28-egg.tsv` — **the useful one.** 2871 frames over 53 min covering a full cooking
+  session: hob on 11:31:41, off 11:39:57 (peak 2660 W), fan and light auto-on 1 s after the hob
+  and off together at 11:44:25. Gap-free. This is what confirmed offsets 44, 45, 46 and 59.
 
 ## Confirmed from these captures
 
 | offset | field | evidence |
 |---|---|---|
+| 2-3 | *(mislabelled `heat_index`)* | Ambient temp @0 moved 21.5→21.8 °C all session while this went 23.4→28.0, corr +0.39 with hob power. Not a heat index — a second heat measurement, probably the stove guard's IR sensor. Also jumps when a person is in front of the hood. |
+| 43 | *(unmapped)* | Cooking-session latch. 0→2 on the exact frame power went nonzero; cleared to 0 at 11:54:42, ~15 min after the hob went off. |
+| 44 | `alarm_level` | Interlock integrator, gated on hob power: mean 1.58 with the hob on vs 0.00 with it off (only 3 of 854 hob-off frames nonzero). Climbed 1→17 over ~65 s unattended, driven to 0 in 19 s by a presence spike. 83% of increments happen at `activity` ≤ 1. Steps of 1 about every 3 s. Peak ever seen 35 — **not** a percentage. |
+| 45 | `activity` | Presence detector. Impulses up, then **every decrement is exactly −2** — 70/70 in the egg session, 594/594 on 08-27. Peak seen 100. |
+| 46-47 | `power` | Real mains watts, u16 LE. 0→2660 W, all values multiples of 20 W, nonzero for exactly the hob-on span. Read a constant 0 in every earlier capture only because the hob was never on during one. |
 | 53 | `light` | 0 with light off, 90 with light on → `/30` = 3.0. Intermediate steps never observed. |
 | 56 | `fan` | 30 with fan on low → `/30` = 1.0. |
-| 57 | *(unmapped)* | constant 0 across the whole idle baseline, 23 with fan on low. Almost certainly fan-related. |
+| 57 | *(unmapped)* | 0 with the fan off, 23 with it on low, in every capture. Fan-related. |
+| 59 | `grease_filter` | Constant within a capture, but the recorder shows 20 → 21 (08-27 14:43 UTC) → 22 (08-28 05:44 UTC): ~1 per 15 h, ~62 days for 0→100. Filter saturation in percent. |
 
-Still unresolved: whether the light has intermediate brightness steps (30/60) — only 0 and
-90 were ever seen. `alarm_level` @44 and `activity` @45 both move, but neither behaves like
-the quantity its name claims: @44 looks like a running/status flag, @45 cycles 0-8 within
-seconds.
+## How the safety interlock works
+
+Safera Sense is a stove guard first: it cuts power to the cooktop if something stays too hot for
+too long. `alarm_level` accumulates while the hob draws power, `activity` knocks it back down, and
+the alarm fires when `alarm_level` passes a threshold with no `activity`. The capture data matches
+this on every count except the trip itself.
+
+## Still unresolved
+
+- **No alarm trip has ever been captured**, so `alarm_level`'s threshold and units are unknown and
+  nothing is known about how a power cut is reported. The hood's self-test should exercise this.
+- **Byte 60 is not a light/fan state.** On 08-27 it read 3 idle / 1 light / 0 fan across 1067
+  frames, which looked airtight; it then sat constant at 3 through the whole 08-28 session with
+  light and fan on. Bytes 61-68 stay static at `00 …  00 ff`.
+- **Bytes 6-7**, a live u16 LE both parsers ignore, correlate with `tvoc` at +0.66 on the idle
+  baseline and **−0.44** during cooking. The sign is unstable, so the raw-MOX-reading lead is dead.
+- Whether the light has intermediate brightness steps — only 0 and 90 have ever been seen at @53,
+  and only 0 and 30 at @56, so the `/30` scaling rests on two points.
+- Whether the auto-on of light and fan when the hob starts is really automatic. It is consistent
+  with the data but the frames cannot distinguish it from a button press at the same moment.

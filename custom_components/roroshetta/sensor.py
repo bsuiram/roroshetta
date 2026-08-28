@@ -14,7 +14,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
-    CONF_ADDRESS,
     PERCENTAGE,
     UnitOfDensity,
     UnitOfPower,
@@ -33,6 +32,7 @@ from .coordinator import (
     RoroshettaConfigEntry,
     RoroshettaDataUpdateCoordinator,
     RoroshettaData,
+    format_sw_version,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -184,18 +184,20 @@ class RoroshettaSensor(CoordinatorEntity, SensorEntity):
         )
         super().__init__(coordinator)
         self.entity_description = description
-        address = (
-            coordinator.entry.unique_id
-            or coordinator.entry.data.get(CONF_ADDRESS)
-            or coordinator.address
-            or coordinator.entry.entry_id
-        )
+        address = coordinator.device_identifier
         self._attr_unique_id = f"{address}_{description.key}"
+        # Read from the hood's Device Information Service and cached in the
+        # config entry; empty only on the very first run, before the first
+        # connection, after which the coordinator updates the registry itself.
+        info = coordinator.device_info_values
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, str(address))},
             name="Roroshetta Sense",
-            manufacturer="Roroshetta",
-            model="Sense",
+            manufacturer=info.get("manufacturer", "Safera Oy"),
+            model=info.get("model", "Sense"),
+            serial_number=info.get("serial_number"),
+            hw_version=info.get("hw_version"),
+            sw_version=format_sw_version(info),
         )
 
     @property
