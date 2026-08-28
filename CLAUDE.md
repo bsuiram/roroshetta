@@ -213,8 +213,8 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
   that way, @53 has only ever read 0 or 90 and @56 only 0 or 30, so the `/30` scaling is an
   inference from two points, not a measurement. BLE presets put 1 and 2 in @53, which does not fit
   that scaling at all — see "Controlling the hood". @57 is now mapped: it is the raw motor speed.
-- **The light's colour has no known command.** It is the one thing the Safera app can do that we
-  cannot.
+- **Auto mode has no known feedback.** Nothing in the payload or the settings blocks reports it,
+  so `0x2004`/`0x2008` cannot be verified and no switch entity was built.
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via
@@ -228,18 +228,25 @@ parameter; the codes live in `const.py`.
 
 | what | command | parameter | feedback |
 |---|---|---|---|
-| light on/off | `0x2005` CMD_LIGHT_PRESET | 1 on, 0 off | `@53` non-zero when lit |
-| light brightness | `0x2006` CMD_LIGHT_BRIGHTNESS | 0-255, monotonic | **none** |
+| light on/off | `0x2005` CMD_LIGHT_PRESET | 1 on, 0 off | `@53` |
+| light brightness | `0x2006` CMD_LIGHT_BRIGHTNESS | 0-255 | `@54`, exact |
+| light colour | `0x2007` CMD_LIGHT_COLOR | 0-255, warm to cool | `@55`, exact |
 | fan speed | `0x2002` CMD_MOTOR_RAW_SPEED | 0-255, 0 stops | `@57`, the real speed |
 | filter reset | `0x2009` CMD_FILTER_CHANGED | 0 | `@59` drops to 0 |
 
 `0x2004` and `0x2008` (the auto modes) had no observable effect on this firmware.
 
-Four things that shaped the implementation, all of them learned the hard way:
+**`0x2007` is not in `magicus/safera-ble`'s table.** It was found by letting the Safera app change
+the colour while the integration was disabled, then reading `babe` back — it holds the last command
+written, so the app's own writes can be read straight out of it. That trick is worth remembering
+for anything else the app can do and we cannot.
 
-- **Brightness has no feedback and does not survive an off/on cycle.** The hood drops back to a dim
-  default, so `async_turn_on` re-applies the last commanded brightness rather than assuming it
-  stuck. `light.py` tracks brightness optimistically because nothing in the payload reports it.
+Things that shaped the implementation, all learned the hard way:
+
+- **The light has full feedback on all three channels**, each confirmed 1:1 against commanded
+  values. `@54` and `@55` both read **0 while the lamp is off**, so brightness and colour have to be
+  remembered across an off/on cycle — the hood also comes back at a dim default. `light.py` keeps
+  the last non-zero values and re-applies them on turn-on.
 - **Brightness 0 is a dim floor, not off.** Turning the lamp off has to go through the preset
   command. Confirmed by eye.
 - **`@56` and `@57` are different things.** `@56` is a level index the hood's own controller
@@ -248,12 +255,15 @@ Four things that shaped the implementation, all of them learned the hard way:
   takes, and it tracked a commanded sweep (0 → 50 → 100 → 180 → 255 → 0) exactly, ramping between
   steps. The fan entity uses `@57`, so it has real feedback; the `fan_level` *sensor* still reads
   `@56` and will sit at 0 whenever HA is driving the fan. That is not a bug.
-- **Above roughly 180 the motor is not audibly different**, though `@57` still reports the higher
-  value.
+- **Above roughly 180 the motor is not audibly different**, though `@57` still reports the value.
+- **The Kelvin range on the light is invented.** The hood has no notion of colour temperature —
+  `@55` is a warm-to-cool slider — so `LIGHT_MIN_KELVIN`/`LIGHT_MAX_KELVIN` exist to drive the HA UI
+  and are not a measurement.
 
-Colour is the one app feature with no known command. There is no documented code for it, so it
-needs discovery rather than testing — either diffing the 200-byte `dcba` settings block before and
-after changing colour in the Safera app, or an Android HCI snoop.
+Auto mode is the one thing still unresolved. `dcba` and `dcbb` were byte-identical either side of
+enabling auto for both light and fan in the app, so **the auto state is not in the settings blocks**
+and there is no known feedback for it. A switch entity would be optimistic and would silently drift
+whenever the app changed it, so none was built.
 
 ### Writing commands
 

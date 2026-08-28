@@ -100,11 +100,13 @@ class RoroshettaData:
     grease_filter: int | None = None
     light: float | None = None
     fan: float | None = None
-    # Raw bytes behind the two scaled fields above. @53 is a preset index when
-    # set over BLE and a brightness when set at the hood, so the light entity
-    # only uses it for on/off. @57 is the actual motor speed, 0-255, in the same
-    # units CMD_MOTOR_RAW_SPEED takes — confirmed by a commanded sweep.
+    # Raw bytes behind the two scaled fields above, all confirmed 1:1 against
+    # commanded values: @53 on/off, @54 brightness, @55 colour (warm to cool),
+    # @57 the actual motor speed in the same 0-255 units the fan command takes.
+    # @54 and @55 both read 0 while the lamp is off.
     light_raw: int | None = None
+    light_brightness: int | None = None
+    light_color: int | None = None
     fan_speed: int | None = None
     activity: int | None = None
     alarm_level: int | None = None
@@ -421,7 +423,6 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
 
                 await self._async_read_device_info(client)
                 self._command_char = self._resolve_command_char(client)
-
                 if not self._paired_once and hasattr(client, "pair"):
                     await client.pair()
 
@@ -547,6 +548,8 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         self.data.light = get_u16_le(53, 1) / 30
         self.data.fan = get_u16_le(56, 1) / 30
         self.data.light_raw = get_u16_le(53, 1)
+        self.data.light_brightness = get_u16_le(54, 1)
+        self.data.light_color = get_u16_le(55, 1)
         self.data.fan_speed = get_u16_le(57, 1)
         self.data.grease_filter = get_u16_le(59, 1)
 

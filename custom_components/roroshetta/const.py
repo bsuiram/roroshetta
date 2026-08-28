@@ -54,11 +54,19 @@ CMD_MOTOR_RAW_SPEED = 0x2002  # parameter 0-255, 0 stops the motor
 CMD_MOTOR_AUTO_MODE = 0x2004  # no observable effect on this firmware
 CMD_LIGHT_PRESET = 0x2005  # 0 off, 1 on
 CMD_LIGHT_BRIGHTNESS = 0x2006  # parameter 0-255; 0 is a dim floor, not off
+CMD_LIGHT_COLOR = 0x2007  # parameter 0-255, warm to cool. Not in the external
+# table at all — found by reading back what the Safera app had last written.
 CMD_LIGHT_AUTO_MODE = 0x2008  # no observable effect on this firmware
 CMD_FILTER_CHANGED = 0x2009  # parameter 0 resets the grease filter counter
 
 LIGHT_PRESET_OFF = 0
 LIGHT_PRESET_ON = 1
+
+# The colour channel is a warm-to-cool slider, 0-255. The hood does not report
+# a colour temperature anywhere, so these Kelvin bounds are a plausible mapping
+# for the Home Assistant UI, not a measurement. Calibrate if it ever matters.
+LIGHT_MIN_KELVIN = 2700
+LIGHT_MAX_KELVIN = 6500
 
 # The motor takes 0-255. Anything above roughly 180 was not audibly different,
 # though byte 57 does report the higher values back.

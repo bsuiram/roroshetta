@@ -51,9 +51,11 @@ The integration provides the following sensors:
 
 As well as the sensors above, the integration exposes:
 
-- **Light** (`light.*`) — on/off and brightness, 0-255. The hood reports no brightness back, so the
-  entity remembers what it last set; it also re-applies brightness after switching on, because the
-  hood drops to a dim default across an off/on cycle.
+- **Light** (`light.*`) — on/off, brightness and colour temperature. The hood reports all three
+  back, so the state is real rather than assumed. Brightness and colour both read 0 while the lamp
+  is off and the hood returns at a dim default, so the entity remembers the last values and
+  re-applies them when switching on. Note the Kelvin range is a mapping for the UI, not a
+  measurement: the hood's colour control is a plain 0-255 warm-to-cool slider.
 - **Fan** (`fan.*`) — on/off and speed as a percentage of the raw 0-255 range. This one has real
   feedback: byte 57 reports the actual motor speed. Note the separate **Fan Speed** *sensor* reads a
   different byte, the hood's own level index, which stays at 0 while Home Assistant drives the fan.

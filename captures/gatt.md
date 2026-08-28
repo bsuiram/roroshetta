@@ -84,6 +84,7 @@ below, so the read-back is not simply the last command sent.
 | `0x2004` | CMD_MOTOR_AUTO_MODE | auto fan on/off |
 | `0x2005` | CMD_LIGHT_PRESET | light preset |
 | `0x2006` | CMD_LIGHT_BRIGHTNESS | light brightness |
+| `0x2007` | CMD_LIGHT_COLOR | light colour, warm to cool — **not in the external table**, found by reading `babe` back after the app wrote it |
 | `0x2008` | CMD_LIGHT_AUTO_MODE | auto light on/off |
 | `0x2009` | CMD_FILTER_CHANGED | filter timer reset, parameter 0 |
 
@@ -94,23 +95,41 @@ Everything below was confirmed with someone standing at the hood.
 
 | command | result |
 |---|---|
-| `0x2005` CMD_LIGHT_PRESET | **Works.** Parameter 1 lights the lamp, 0 switches it off. `light@53` follows the parameter, so it holds a preset index rather than a brightness when written this way — note the hood's own controls put 90 in the same byte. |
-| `0x2006` CMD_LIGHT_BRIGHTNESS | **Works, 0-255 and monotonic.** 1 is very dim, and 200 and 255 are each visibly brighter than the last. **0 is a dim floor, not off**, so off has to go through the preset command. Nothing in the payload reports brightness back, and it resets to a dim default across an off/on cycle. |
-| `0x2002` CMD_MOTOR_RAW_SPEED | **Works, 0-255.** A commanded sweep of 0 → 50 → 100 → 180 → 255 → 0 was tracked exactly by **byte 57**, ramping between steps. Above roughly 180 the motor is not audibly different, though 57 still reports the value. |
-| `0x2009` CMD_FILTER_CHANGED | **Works.** Parameter 0 took `grease_filter@59` from 22 to 0 within four seconds — which also proves 59 really is the filter counter. |
-| `0x2004` / `0x2008` auto modes | No observable effect on this firmware. |
+| `0x2005` CMD_LIGHT_PRESET | **Works.** 1 lights the lamp, 0 switches it off. `@53` follows. |
+| `0x2006` CMD_LIGHT_BRIGHTNESS | **Works, 0-255 and monotonic.** 1 is very dim; 200 and 255 are each visibly brighter than the last. **0 is a dim floor, not off.** `@54` reports it back exactly. |
+| `0x2007` CMD_LIGHT_COLOR | **Works, 0-255, warm to cool** — visibly confirmed. `@55` reports it back exactly. Not documented anywhere else. |
+| `0x2002` CMD_MOTOR_RAW_SPEED | **Works, 0-255.** A sweep of 0 → 50 → 100 → 180 → 255 → 0 was tracked exactly by **byte 57**, ramping between steps. Above roughly 180 the motor is not audibly different. |
+| `0x2009` CMD_FILTER_CHANGED | **Works.** Parameter 0 took `grease_filter@59` from 22 to 0 in four seconds, which also proves 59 is the filter counter. |
+| `0x2004` / `0x2008` auto modes | No observable effect, and no feedback anywhere to check against. |
 
-**Byte 57 is the fan feedback, byte 56 is not.** `@56` is a level index the hood's own controller
-maintains: it reads 30 with the fan on low from the panel, and stays 0 the whole time a BLE speed
-command has the motor running. `@57` is the actual motor speed in the same 0-255 units the command
-takes.
+### The light's three bytes
 
-Colour is the one app feature with no known command code. It needs discovery — diff the 200-byte
-`dcba` settings block before and after changing colour in the app, or capture an Android HCI snoop.
+| byte | meaning | note |
+|---|---|---|
+| 53 | on/off | 1 when switched over BLE, 90 when switched at the hood |
+| 54 | brightness 0-255 | exact 1:1 with the command |
+| 55 | colour 0-255 | exact 1:1 with the command |
 
-`babe` reads back the last command written, but reverts to `021000003c000000` after a reconnect, so
-it is a volatile command buffer rather than a settings register. A before/after diff of `dcba`,
-`dcbb`, `abba`, `babe` and `abd3` confirmed that none of this testing changed stored configuration.
+**All three read 0 while the lamp is off**, so brightness and colour have to be remembered across an
+off/on cycle rather than read back.
+
+### Byte 57 is the fan feedback, byte 56 is not
+
+`@56` is a level index the hood's own controller maintains: it reads 30 with the fan on low from the
+panel, and stays 0 the whole time a BLE speed command has the motor running. `@57` is the actual
+motor speed in the same 0-255 units the command takes.
+
+### Reading the app's own commands
+
+`babe` holds the **last command written to it**, by anyone. Disabling the config entry, driving a
+control from the Safera app, then re-enabling and reading `babe` reveals exactly what the app sent.
+That is how `0x2007` was found. It reverts to `021000003c000000` after a reconnect, so it is a
+volatile buffer rather than a settings register.
+
+The 200-byte `dcba` and 202-byte `dcbb` settings blocks did **not** change when auto mode was
+enabled for both light and fan in the app, so auto state is not stored there. A before/after diff of
+`dcba`, `dcbb`, `abba`, `babe`, `abd3`, `abdf` and `abcf` across a full app session showed `babe` as
+the only difference — none of this testing changed stored configuration.
 
 ## How not to test writes
 
