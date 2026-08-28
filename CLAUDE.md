@@ -116,12 +116,16 @@ To capture frames, switch on the dedicated frame logger
 and grep the core log for `coordinator.frames`. See `captures/` for tooling, stored captures, and a
 per-byte analyser that labels each offset with the field currently read from it.
 
-`captures/gatt.md` holds the hood's full GATT table, dumped 2026-08-28. Two things there matter
+`captures/gatt.md` holds the hood's full GATT table, dumped 2026-08-28, together with the command
+protocol from [magicus/safera-ble](https://github.com/magicus/safera-ble/discussions/1) — an
+independent reverse-engineering of the same device. Two things there matter
 beyond reference value: **the hood stops advertising entirely while a central is connected**, so
 nothing else can scan it while the integration runs (disable the config entry first); and
-**writable characteristics do exist**, so BLE control of light and fan is plausible but unproven.
-One of them is the Nordic DFU bootloader and another probably holds WiFi credentials — do not
-write experimentally, capture what the Safera app sends instead.
+**writable characteristics do exist**, and BLE control is no longer theoretical — a command has
+audibly run the fan.
+Commands go to `babe` as a 4-byte LE code plus a 4-byte LE parameter, and **this has been tested on
+the real hood** — see "Controlling the hood" below. Do not touch the Nordic DFU service at
+`0000fe59-…`; it is the firmware bootloader.
 
 ### What the hood actually is
 
@@ -148,17 +152,20 @@ offsets that were previously marked unsure, and corrected one that was wrongly a
   all the tail of a decay. It climbed 1 → 17 over ~65 s of unattended cooking, then a presence
   spike drove it to 0 within 19 s. 83% of its increments occur while `activity` ≤ 1. It ramps and
   decays in steps of 1 at roughly 3 s intervals. **Peak ever observed is 35, so the trip threshold
-  and the scale are still unknown** — it is not a percentage.
+  is unknown.** `magicus/safera-ble` documents it as a percentage, which our data neither confirms
+  nor contradicts — never seeing it above 35 says nothing about the top of the scale.
 - **`activity` @45 is a presence detector with strict linear decay.** Impulse up on presence, then
   **every single decrement is exactly −2** (70 of 70 in this session, 594 of 594 on 2026-08-27).
   Peak observed 100.
 - **`grease_filter` @59 is a slow monotonic counter.** Constant within any one capture, but the HA
   recorder shows 20 → 21 (08-27 14:43 UTC) → 22 (08-28 05:44 UTC): about 1 per 15 h, extrapolating
   to ~62 days for 0 → 100. Consistent with filter saturation in percent.
-- **Byte 43 is an unmapped cooking-session latch.** It flipped 0 → 2 on the exact frame `power`
-  first went nonzero, held at 2 through the whole session, and cleared back to 0 at 11:54:42 —
-  ~15 min after the hob went off and ~10 min after the fan stopped. Not decoded by either parser.
-- **`heat_index` @2-3 is misnamed.** Ambient `temperature` @0-1 moved only 21.5 → 21.8 °C across the
+- **Byte 43 is a cooking-session latch**, `Activity Type` in `magicus/safera-ble`'s table. It
+  flipped 0 → 2 on the exact frame `power` first went nonzero, held at 2 through the whole session,
+  and cleared back to 0 at 11:54:42 — ~15 min after the hob went off and ~10 min after the fan
+  stopped. Not decoded by either parser.
+- **`heat_index` @2-3 is misnamed** — it is Surface Temperature, which `magicus/safera-ble`
+  confirms independently. Ambient `temperature` @0-1 moved only 21.5 → 21.8 °C across the
   session while @2-3 went 23.4 → 28.0 and correlates with hob power at +0.39. A true heat index at
   21.7 °C / 52% RH is ~21.7, not 28. @2-3 is a second heat measurement, most plausibly the stove
   guard's IR sensor aimed at the hob — which also explains why it jumps when a person stands in
@@ -166,6 +173,21 @@ offsets that were previously marked unsure, and corrected one that was wrongly a
 - Light and fan came on **one second after** the hob drew power and switched off together 4.5 min
   after it stopped, which looks like auto-start and run-on rather than button presses. Data cannot
   distinguish the two; do not assume a control change was user-initiated.
+
+### Where the external table disagrees
+
+[magicus/safera-ble](https://github.com/magicus/safera-ble/discussions/1) documents a "54+ byte"
+payload and stops at offset 47. Our frames are consistently 69 bytes and carry `light@53`,
+`fan@56` and `grease_filter@59`, which its table does not mention at all — most likely a different
+firmware generation (this hood reports hardware 3.2.255.0, firmware 13, software 75). Two of its
+offsets do not survive contact with our frames, so **prefer the measured values here**:
+
+- its particle index at `@12-13 / 5` reads **0.00** on our frames, while our `pm25` at `@13 / 1000`
+  gives 5.12 alongside an AQI of 19;
+- its heat index at `@24 × 2` gives 48 °C, which is not credible.
+
+Everything else it lists agrees, including several of our constant bytes: `@26` battery (100),
+`@28` alarm status (1), `@33` device state (2), `@34-35` sensor error bitmask (0).
 
 ### Still open
 
@@ -176,22 +198,48 @@ offsets that were previously marked unsure, and corrected one that was wrongly a
 - **No alarm trip has ever been observed**, so `alarm_level`'s threshold and units are unknown, and
   it is unclear whether any field reports the power actually being cut. The hood's self-test is the
   cheap way to exercise this without a genuinely dangerous pan.
-- **Bytes 6-7 are a live 16-bit LE value both parsers ignore.** The idle baseline put it at +0.66
-  with `tvoc`; the cooking session puts it at **−0.44** with the same field, so the sign is not
-  stable and the MOX-gas-reading lead does not survive. Unexplained.
+- **Bytes 6-7 are ambient light**, `value / 32` lux per `magicus/safera-ble`, and both parsers
+  ignore them. That reads as 25-157 lux (mean 108) on our frames, right for a kitchen, and explains
+  the dips when someone is at the hob as shadowing: mean 114 lux with nobody present versus 100 lux
+  with someone there. It also kills the earlier raw-MOX-gas lead, which rested on a `tvoc`
+  correlation of +0.66 on the idle baseline that flipped to **−0.44** during cooking.
 - Bytes 24-35 are near-constant and look like configuration or thresholds. Byte 9 and byte 52 vary
   slightly.
-- **Intermediate light and fan steps have never been observed.** @53 has only ever read 0 or 90 and
-  @56 only 0 or 30, so the `/30` scaling is an inference from two points, not a measurement. @57
-  tracks the fan (0 off, 23 on low) and is unmapped.
+- **Intermediate light and fan steps have never been observed from the hood's own controls.** Set
+  that way, @53 has only ever read 0 or 90 and @56 only 0 or 30, so the `/30` scaling is an
+  inference from two points, not a measurement. BLE presets put 1 and 2 in @53, which does not fit
+  that scaling at all — see "Controlling the hood". @57 tracks the fan (0 off, 23 on low) and is
+  unmapped.
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via
 `get_u16_le(36, 3)` despite the helper's name.
 
+## Controlling the hood
+
+`babe` is a working command channel on this firmware, confirmed 2026-08-28. `0x2002`
+(CMD_MOTOR_RAW_SPEED) **audibly ran the motor**, and `0x2005` (CMD_LIGHT_PRESET) drove `light@53`
+to match its parameter (0 → 1 → 2 → 0). `0x2006` (brightness) and `0x2004` (motor auto mode) did
+nothing observable. Full results and the command table are in `captures/gatt.md`.
+
+Two findings shape anything built on this:
+
+- **`@56` does not report BLE-commanded fan speed.** It read 30 when the fan was set at the hood's
+  own controls, but stayed 0 while a BLE command had the motor running. A fan entity would have to
+  be optimistic about its state. Byte 57 is the untested candidate for real feedback.
+- **`@53` set by preset holds 1 or 2, not the 90 seen when the light is switched at the hood**, so
+  the `/30` scaling does not apply to preset-written values, and it is still unknown whether the
+  preset actually lights the lamp — nobody was watching when it worked.
+
+**Do not test writes from a boot-time experiment.** Writing seconds after `start_notify` returned
+`[Errno 104] Connection reset by peer`, dropped the link and left every entity unavailable until a
+restart; repeated restarts compound it, because the hood accepts one central at a time and each
+restart re-takes the slot. Build an on-demand path — a service or button entity — and write from an
+established, healthy connection.
+
 ## Traps that already bit this code
 
-Two bugs here cost real debugging time and are easy to reintroduce:
+Three bugs here cost real debugging time and are easy to reintroduce:
 
 - **`asyncio.wait()` requires tasks.** Passing bare coroutines raises `TypeError: Passing coroutines
   is forbidden` on Python 3.11+. It fired every connection right after `start_notify`, got swallowed
@@ -200,9 +248,15 @@ Two bugs here cost real debugging time and are easy to reintroduce:
 - **`BleakClient.set_disconnected_callback` no longer exists** (removed in bleak 0.19). The old code
   guarded it with `hasattr`, so it silently did nothing and dropped links were never noticed. The
   callback must be passed to `establish_connection(...)` / `BleakClient(...)` at construction.
+- **`write_gatt_char` by UUID string can fail while notifications on the same service work.**
+  Writing to `"0000babe-…"` raised `BleakCharacteristicNotFoundError` on connections where
+  `start_notify` on `beef` — same service — was streaming fine, which is the signature of a partial
+  cached GATT table. Resolve the characteristic object by walking `client.services`, or write to its
+  handle (`babe` is 42).
 
-The broad `except Exception` in `_run_notify_loop` is what turned both into silent misbehaviour
-rather than a traceback. Be suspicious of it when a symptom looks like "works once, then nothing".
+The broad `except Exception` in `_run_notify_loop` is what turned the first two into silent
+misbehaviour rather than a traceback. Be suspicious of it when a symptom looks like "works once,
+then nothing".
 
 ## Verifying a change without hardware
 
