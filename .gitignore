@@ -1,3 +1,8 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# Collected device data stays out of this repo (it is public).
+# Frame captures live in ~/priv/roroshetta-captures/
+*.tsv
+captures/*.tsv

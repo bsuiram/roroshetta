@@ -15,14 +15,51 @@ polling design with a 60s interval and 3 retries; that is stale too, see Archite
 
 ## Running / debugging
 
-There is no unit test harness. The two ways to exercise the code:
+There is no unit test harness and no CI. Four ways to exercise the code, cheapest first:
 
-- `python test.py` — standalone bleak script, run from a machine with a BLE adapter near the hood.
-  It scans for `Roroshetta Sense`, subscribes to the `0000BEEF-…` characteristic and prints decoded
-  frames. This is the reference implementation of the byte decoding and the fastest way to check a
-  protocol change or probe unmapped bytes (flip `print_bit` / `print_all` in `decode_env1`).
-- Deploy into Home Assistant and watch logs with `custom_components.roroshetta` and
-  `homeassistant.components.bluetooth` at `debug` (see `custom_components/roroshetta/README.md`).
+- **Stub-import the coordinator** — no hardware, no Home Assistant. See "Verifying a change without
+  hardware" below. Catches control-flow regressions in seconds; proves nothing about byte offsets.
+- **`python test.py`** — standalone bleak script, run from a machine with a BLE adapter near the
+  hood. Scans for `Roroshetta Sense`, subscribes to `0000BEEF-…` and prints decoded frames. Reference
+  implementation of the decoding (flip `print_bit` / `print_all` in `decode_env1` to probe bytes).
+  Note it will fight the integration for the hood's single connection slot — stop one or the other.
+- **Deploy to Home Assistant and read the log.** The details below are what make this bearable.
+- **Read entity history** via `/api/history/period`. For questions about *values* (did `fan` change
+  when I turned the fan on?) this beats sampling the log: it survives BLE disconnects and is already
+  deduplicated. Reach for it first when correlating a physical action with a sensor.
+
+### Deploying
+
+Copy `custom_components/roroshetta/` into the HA config directory and **restart Home Assistant**.
+Reloading the config entry is *not* enough — Python does not re-import a changed module, so a reload
+silently runs the old code. Every code change needs a full restart; only config-entry state changes
+can be tested with a reload.
+
+### Reading the log
+
+- `/api/error_log` was **removed** in recent HA versions (returns 404). Use the Supervisor proxy:
+  `GET /api/hassio/core/logs?lines=N`, which returns the raw core log including DEBUG lines.
+- Turn on debug at runtime with the **`logger.set_level`** service — no YAML edit, no restart:
+  `{"custom_components.roroshetta": "debug"}`. It resets on every restart, so re-apply it after one.
+- Keep `custom_components.roroshetta.sensor` at `info`. HA reads entity properties constantly and
+  debug there is pure noise.
+- Raw frames have their own logger, `custom_components.roroshetta.coordinator.frames`, so payloads
+  can be captured without enabling debug for everything else. See `captures/`.
+
+### Is it the code or the transport?
+
+Most "it stopped updating" symptoms in this integration have turned out to be BLE transport
+problems, not bugs. Before debugging the code, rule that out:
+
+- **A clean `disconnected` with no GATT error means the remote end closed the link deliberately** —
+  another client took the hood's single connection slot, or the bluetooth proxy's tunnel collapsed.
+  RF failure looks different: GATT errors, timeouts, `error=133`.
+- **If an ESPHome bluetooth proxy is in the path, its self-reported WiFi signal is misleading.** It
+  reports what it *hears from* the access point, which is flattered by the AP's stronger transmitter.
+  Check what the AP hears *from it* — that is the direction that fails. A gap of 25+ dB between the
+  two is normal and the lower number is the real one.
+- Proxy WiFi drops take every BLE connection tunnelled through them down too, so a hood disconnect
+  can have nothing to do with the hood.
 
 ## Architecture
 
@@ -74,6 +111,24 @@ both are wrong. Highest mapped offset is 59, so **bytes 60-68 are entirely unexp
 still marked unsure (`alarm_level` @44, `activity` @45, `grease_filter` @59). **Keep `test.py` and
 `coordinator._parse_data` in sync** — if you change a scaling factor or offset in one, change it in
 the other, and validate against a live device before trusting a new mapping.
+
+To capture frames, switch on the dedicated frame logger
+(`custom_components.roroshetta.coordinator.frames` → `debug` via the `logger.set_level` service)
+and grep the core log for `coordinator.frames`. See `captures/` for tooling, a stored idle baseline,
+and a per-byte analyser that labels each offset with the field currently read from it.
+
+What the idle baseline (51 frames, 2026-08-27) established:
+
+- **Bytes 60-68 are static** at `03 00 00 00 00 00 00 00 ff` with the hood idle — likely a trailer
+  or status block rather than live sensor data. Not yet observed under load.
+- **Bytes 6-7 are a live 16-bit LE value the parser ignores entirely.** It drifts smoothly
+  (~24000-33000) and is unambiguously little-endian: big-endian reads as noise. It correlates with
+  `tvoc` at +0.66 and `temperature` at -0.50, which is the signature of a raw MOX gas reading, but
+  tVOC barely moved during the capture so that is a lead, not a conclusion.
+- Bytes 24-35 (`15 01 64 ff 01 ae ff 1e 00 02 00 00`) are constant and look like configuration or
+  thresholds. Bytes 9 and 52 vary slightly. `uptime` is confirmed as a 3-byte LE counter.
+- `fan`, `light`, `power`, `activity` and `alarm_level` all read zero at idle, so **the unsure
+  offsets cannot be confirmed without someone operating the hood** while frames are captured.
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via

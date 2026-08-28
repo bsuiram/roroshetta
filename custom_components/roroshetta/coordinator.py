@@ -37,6 +37,14 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# Raw frames on their own logger so they can be captured without turning on
+# debug for everything else:
+#   action: logger.set_level
+#   data: {"custom_components.roroshetta.coordinator.frames": "debug"}
+# Emits one hex line per frame (~1/second), for mapping the payload offsets
+# that are still unknown. See CLAUDE.md.
+_FRAME_LOGGER = logging.getLogger(f"{__name__}.frames")
+
 type RoroshettaConfigEntry = ConfigEntry[RoroshettaDataUpdateCoordinator]
 
 
@@ -311,7 +319,8 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
 
     def _parse_data(self, data: bytes) -> None:
         """Parse the data from the device."""
-        _LOGGER.debug("Parsing data from Roroshetta device: %s bytes", len(data))
+        # Logged before the length check so undersized frames are captured too.
+        _FRAME_LOGGER.debug("%d %s", len(data), data.hex())
         if len(data) < 60:
             _LOGGER.warning("Received data too short: %d bytes", len(data))
             return
