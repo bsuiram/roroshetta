@@ -28,19 +28,24 @@ paired the flag is stored in the config entry and never asked again.
 The integration provides the following sensors:
 
 - **Temperature**: Ambient temperature in °C
-- **Heat Index**: Heat index temperature in °C
+- **Heat Index**: Name inherited from the original decode and probably wrong. It tracks hob heat
+  (23.4 → 28.0 °C across a cooking session while ambient moved 0.3 °C) and is most likely the stove
+  guard's IR sensor rather than a computed heat index
 - **Humidity**: Relative humidity in %
 - **CO2**: Carbon dioxide concentration in ppm
 - **TVOC**: Total Volatile Organic Compounds (reported as µg/m³; unit not yet confirmed against the app)
 - **PM2.5**: Particulate matter 2.5 in µg/m³
 - **AQI**: Air Quality Index
-- **Power**: Current power consumption in W
+- **Power**: Power drawn by the cooktop, in W (0 when the hob is off; observed up to 2660 W)
 - **Uptime**: Device uptime in seconds
-- **Light Level**: Ambient light level (0-30 scale)
-- **Fan Speed**: Fan speed (0-30 scale)
-- **Grease Filter Status**: Filter status indicator
-- **Activity Level**: Device activity indicator
-- **Alarm Level**: Alarm status
+- **Light Level**: The hood's own lamp, not ambient light. Raw byte / 30; only 0 and 3.0 have
+  ever been observed, so intermediate brightness steps are unconfirmed
+- **Fan Speed**: Raw byte / 30. Observed 0 through 4.0
+- **Grease Filter**: Filter saturation in percent — a slow counter, climbs about 1 per 15 h
+- **Activity Level**: Presence at the hob — spikes when someone is there, then decays steadily to 0
+- **Alarm Level**: Stove-guard hazard integrator. Rises while the hob draws power, is knocked
+  back down by activity, and triggers the cooktop cut-off if it passes a threshold with nobody
+  present. Raw units, not a percentage — the threshold is not known
 
 ## Debug Logging
 

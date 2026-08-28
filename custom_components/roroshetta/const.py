@@ -12,8 +12,19 @@ MANUFACTURER_ID = 1837
 # Update interval in seconds
 UPDATE_INTERVAL = 60
 
+# Device Information Service (0x180A) characteristics. Read once per hood and
+# cached in the config entry so Home Assistant's device page shows the real
+# manufacturer, model and revisions instead of hardcoded guesses.
+DIS_MANUFACTURER = "00002a29-0000-1000-8000-00805f9b34fb"
+DIS_MODEL = "00002a24-0000-1000-8000-00805f9b34fb"
+DIS_SERIAL = "00002a25-0000-1000-8000-00805f9b34fb"
+DIS_HARDWARE_REV = "00002a27-0000-1000-8000-00805f9b34fb"
+DIS_FIRMWARE_REV = "00002a26-0000-1000-8000-00805f9b34fb"
+DIS_SOFTWARE_REV = "00002a28-0000-1000-8000-00805f9b34fb"
+
 # Config entry data keys
 DATA_PAIRED_ONCE = "paired_once"
+DATA_DEVICE_INFO = "device_info"
 
 # Pairing window delay on first setup
 PAIRING_WINDOW_SECONDS = 5

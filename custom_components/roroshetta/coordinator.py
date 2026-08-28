@@ -17,14 +17,23 @@ except ImportError:  # pragma: no cover - fallback for environments without the 
     establish_connection = None
 
 from homeassistant.components import bluetooth
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
 
 from .const import (
     BEEF_CHARACTERISTIC,
+    DATA_DEVICE_INFO,
     DATA_PAIRED_ONCE,
     DEVICE_WAIT_SECONDS,
+    DIS_FIRMWARE_REV,
+    DIS_HARDWARE_REV,
+    DIS_MANUFACTURER,
+    DIS_MODEL,
+    DIS_SERIAL,
+    DIS_SOFTWARE_REV,
     DOMAIN,
     MAX_BACKOFF_SECONDS,
     PAIRING_WINDOW_SECONDS,
@@ -46,6 +55,30 @@ _LOGGER = logging.getLogger(__name__)
 _FRAME_LOGGER = logging.getLogger(f"{__name__}.frames")
 
 type RoroshettaConfigEntry = ConfigEntry[RoroshettaDataUpdateCoordinator]
+
+
+# Device Information Service fields read on connect, in read order.
+DIS_FIELDS: tuple[tuple[str, str], ...] = (
+    ("manufacturer", DIS_MANUFACTURER),
+    ("model", DIS_MODEL),
+    ("serial_number", DIS_SERIAL),
+    ("hw_version", DIS_HARDWARE_REV),
+    ("firmware_rev", DIS_FIRMWARE_REV),
+    ("software_rev", DIS_SOFTWARE_REV),
+)
+
+
+def format_sw_version(values: dict[str, str]) -> str | None:
+    """Combine the two revision strings the hood reports into one label.
+
+    The Device Information Service exposes Firmware Revision and Software
+    Revision separately, but ``DeviceInfo`` only has ``sw_version``.
+    """
+    firmware = values.get("firmware_rev")
+    software = values.get("software_rev")
+    if firmware and software:
+        return f"{firmware} (software {software})"
+    return firmware or software or None
 
 
 @dataclass
@@ -92,12 +125,88 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         self.data = RoroshettaData()
         self._client: BleakClient | None = None
         self._paired_once = bool(entry.data.get(DATA_PAIRED_ONCE))
+        self._device_info: dict[str, str] = dict(
+            entry.data.get(DATA_DEVICE_INFO) or {}
+        )
         self._pairing_delay_done = False
         self._stop_event = asyncio.Event()
         self._connection_task: asyncio.Task[None] | None = None
         self._connected = False
         self._last_notification: float | None = None
         _LOGGER.debug("Roroshetta coordinator initialized successfully")
+
+    @property
+    def device_identifier(self) -> str:
+        """Stable id used for the device registry entry and unique ids."""
+        return (
+            self.entry.unique_id
+            or self.entry.data.get(CONF_ADDRESS)
+            or self.address
+            or self.entry.entry_id
+        )
+
+    @property
+    def device_info_values(self) -> dict[str, str]:
+        """Cached Device Information Service strings, empty until first read."""
+        return self._device_info
+
+    async def _async_read_device_info(self, client: BleakClient) -> None:
+        """Read the Device Information Service once and cache it.
+
+        These strings never change for a given hood, so this runs only until it
+        succeeds; afterwards the values come from the config entry and are
+        available at setup, before any connection exists.
+        """
+        # Retry while anything is still missing, so a flaky link that yielded
+        # only some fields heals on a later connect, and a cache written by an
+        # older version picks up fields added since.
+        if all(key in self._device_info for key, _ in DIS_FIELDS):
+            return
+
+        values: dict[str, str] = dict(self._device_info)
+        for key, uuid in DIS_FIELDS:
+            try:
+                raw = await client.read_gatt_char(uuid)
+            except Exception as err:  # noqa: BLE001 - never block streaming on this
+                _LOGGER.debug("Could not read device info %s: %s", key, err)
+                continue
+            text = raw.decode("utf-8", "replace").replace("\x00", "").strip()
+            if text:
+                values[key] = text
+
+        if not values:
+            return
+
+        self._device_info = values
+        _LOGGER.debug("Read device information: %s", values)
+
+        # Preserve every other key, notably DATA_PAIRED_ONCE.
+        self.hass.config_entries.async_update_entry(
+            self.entry, data={**self.entry.data, DATA_DEVICE_INFO: values}
+        )
+        self._update_device_registry(values)
+
+    def _update_device_registry(self, values: dict[str, str]) -> None:
+        """Push the strings onto the existing device registry entry.
+
+        Entities set ``device_info`` when they are added, which on a first run
+        happens before the hood has ever been connected. Without this the real
+        values would not appear until the next restart.
+        """
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_device(
+            identifiers={(DOMAIN, str(self.device_identifier))}
+        )
+        if device is None:
+            return
+        registry.async_update_device(
+            device.id,
+            manufacturer=values.get("manufacturer"),
+            model=values.get("model"),
+            serial_number=values.get("serial_number"),
+            hw_version=values.get("hw_version"),
+            sw_version=format_sw_version(values),
+        )
 
     @property
     def device_available(self) -> bool:
@@ -220,6 +329,8 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
                 self._client = client
 
                 _LOGGER.debug("Connected to Roroshetta device at %s", address)
+
+                await self._async_read_device_info(client)
 
                 if not self._paired_once and hasattr(client, "pair"):
                     await client.pair()
