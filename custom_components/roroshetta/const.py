@@ -51,13 +51,19 @@ STOP_TIMEOUT_SECONDS = 5
 # 2026-08-28 except where noted. Payload is a 4-byte LE code then a 4-byte LE
 # parameter, written to BABE_CHARACTERISTIC.
 CMD_MOTOR_RAW_SPEED = 0x2002  # parameter 0-255, 0 stops the motor
-CMD_MOTOR_AUTO_MODE = 0x2004  # no observable effect on this firmware
+CMD_MOTOR_AUTO_MODE = 0x2004  # 1 enables fan auto, 0 disables
 CMD_LIGHT_PRESET = 0x2005  # 0 off, 1 on
 CMD_LIGHT_BRIGHTNESS = 0x2006  # parameter 0-255; 0 is a dim floor, not off
 CMD_LIGHT_COLOR = 0x2007  # parameter 0-255, warm to cool. Not in the external
 # table at all — found by reading back what the Safera app had last written.
-CMD_LIGHT_AUTO_MODE = 0x2008  # no observable effect on this firmware
+CMD_LIGHT_AUTO_MODE = 0x2008  # 1 enables light auto, 0 disables
 CMD_FILTER_CHANGED = 0x2009  # parameter 0 resets the grease filter counter
+
+# Byte 60 is an auto-mode bitmask. Any manual light or fan command clears the
+# corresponding bit — the hood drops out of auto as soon as it is driven by
+# hand, whether from Home Assistant, the app or its own panel.
+AUTO_MASK_FAN = 0x01
+AUTO_MASK_LIGHT = 0x02
 
 LIGHT_PRESET_OFF = 0
 LIGHT_PRESET_ON = 1

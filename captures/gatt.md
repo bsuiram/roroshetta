@@ -100,7 +100,8 @@ Everything below was confirmed with someone standing at the hood.
 | `0x2007` CMD_LIGHT_COLOR | **Works, 0-255, warm to cool** — visibly confirmed. `@55` reports it back exactly. Not documented anywhere else. |
 | `0x2002` CMD_MOTOR_RAW_SPEED | **Works, 0-255.** A sweep of 0 → 50 → 100 → 180 → 255 → 0 was tracked exactly by **byte 57**, ramping between steps. Above roughly 180 the motor is not audibly different. |
 | `0x2009` CMD_FILTER_CHANGED | **Works.** Parameter 0 took `grease_filter@59` from 22 to 0 in four seconds, which also proves 59 is the filter counter. |
-| `0x2004` / `0x2008` auto modes | No observable effect, and no feedback anywhere to check against. |
+| `0x2004` CMD_MOTOR_AUTO_MODE | **Works.** 1 arms fan auto, 0 disarms it. Reported by **byte 60 bit 0**. |
+| `0x2008` CMD_LIGHT_AUTO_MODE | **Works.** 1 arms light auto, 0 disarms it. Reported by **byte 60 bit 1**. |
 
 ### The light's three bytes
 
@@ -112,6 +113,20 @@ Everything below was confirmed with someone standing at the hood.
 
 **All three read 0 while the lamp is off**, so brightness and colour have to be remembered across an
 off/on cycle rather than read back.
+
+### Byte 60 is the auto-mode bitmask
+
+Bit 0 is fan auto, bit 1 is light auto: 3 both armed, 2 light only, 1 fan only, 0 neither. **Any
+manual light or fan command clears the matching bit**, whoever sends it.
+
+That explains the 2026-08-27 readings which looked like an operating-state enum — 3 idle, 1 with the
+light on, 0 with the fan on — and were really auto bits being cleared by the manual actions. It also
+confirms that the light and fan **auto-started** during the cooking session, where `@60` stayed at 3
+throughout.
+
+The first attempt to find this diffed the settings blocks around enabling auto in the app and saw
+nothing, because earlier probes had already left both autos armed, so the app changed nothing.
+Establishing a known-disarmed state first is what made it fall out.
 
 ### Byte 57 is the fan feedback, byte 56 is not
 
@@ -126,8 +141,8 @@ control from the Safera app, then re-enabling and reading `babe` reveals exactly
 That is how `0x2007` was found. It reverts to `021000003c000000` after a reconnect, so it is a
 volatile buffer rather than a settings register.
 
-The 200-byte `dcba` and 202-byte `dcbb` settings blocks did **not** change when auto mode was
-enabled for both light and fan in the app, so auto state is not stored there. A before/after diff of
+The 200-byte `dcba` and 202-byte `dcbb` settings blocks did **not** change across a full app
+session; auto state lives in byte 60 of the payload, not in the settings blocks. A before/after diff of
 `dcba`, `dcbb`, `abba`, `babe`, `abd3`, `abdf` and `abcf` across a full app session showed `babe` as
 the only difference — none of this testing changed stored configuration.
 

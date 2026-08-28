@@ -195,10 +195,6 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
 
 ### Still open
 
-- **Byte 60 is not an operating-state enum.** On the 2026-08-27 capture it read 3 idle / 1 light on
-  / 0 fan on, which looked deterministic across 1067 frames. It then sat constant at 3 through the
-  entire 08-28 session *including* light and fan on. Whatever drives it, it is not light or fan
-  state. Bytes 61-68 remain static at `00 00 00 00 00 00 00 ff`.
 - **No alarm trip has ever been observed**, so `alarm_level`'s threshold and units are unknown, and
   it is unclear whether any field reports the power actually being cut. The hood's self-test is the
   cheap way to exercise this without a genuinely dangerous pan.
@@ -213,8 +209,7 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
   that way, @53 has only ever read 0 or 90 and @56 only 0 or 30, so the `/30` scaling is an
   inference from two points, not a measurement. BLE presets put 1 and 2 in @53, which does not fit
   that scaling at all — see "Controlling the hood". @57 is now mapped: it is the raw motor speed.
-- **Auto mode has no known feedback.** Nothing in the payload or the settings blocks reports it,
-  so `0x2004`/`0x2008` cannot be verified and no switch entity was built.
+- **Bytes 61-68 are static** at `00 00 00 00 00 00 00 ff` and remain unexplained.
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via
@@ -233,8 +228,8 @@ parameter; the codes live in `const.py`.
 | light colour | `0x2007` CMD_LIGHT_COLOR | 0-255, warm to cool | `@55`, exact |
 | fan speed | `0x2002` CMD_MOTOR_RAW_SPEED | 0-255, 0 stops | `@57`, the real speed |
 | filter reset | `0x2009` CMD_FILTER_CHANGED | 0 | `@59` drops to 0 |
-
-`0x2004` and `0x2008` (the auto modes) had no observable effect on this firmware.
+| fan auto | `0x2004` CMD_MOTOR_AUTO_MODE | 1 arm, 0 disarm | `@60` bit 0 |
+| light auto | `0x2008` CMD_LIGHT_AUTO_MODE | 1 arm, 0 disarm | `@60` bit 1 |
 
 **`0x2007` is not in `magicus/safera-ble`'s table.** It was found by letting the Safera app change
 the colour while the integration was disabled, then reading `babe` back — it holds the last command
@@ -260,10 +255,25 @@ Things that shaped the implementation, all learned the hard way:
   `@55` is a warm-to-cool slider — so `LIGHT_MIN_KELVIN`/`LIGHT_MAX_KELVIN` exist to drive the HA UI
   and are not a measurement.
 
-Auto mode is the one thing still unresolved. `dcba` and `dcbb` were byte-identical either side of
-enabling auto for both light and fan in the app, so **the auto state is not in the settings blocks**
-and there is no known feedback for it. A switch entity would be optimistic and would silently drift
-whenever the app changed it, so none was built.
+### Auto mode, and byte 60
+
+**Byte 60 is an auto-mode bitmask**: bit 0 is fan auto, bit 1 is light auto, so 3 means both armed
+and 0 means neither. That finally explains a byte that had defeated two earlier readings.
+
+**Any manual light or fan command disarms the corresponding auto mode** — from Home Assistant, the
+Safera app or the hood's own controls alike. Switching the hood light on from HA therefore stops it
+auto-starting the next time someone cooks, until the auto switch is turned back on. The two switch
+entities exist to make that visible and reversible rather than a silent surprise.
+
+This also settles the 2026-08-27 readings that looked contradictory: 3 while idle, 1 with the light
+on, 0 with the fan on. Those are not an operating state at all — they are auto bits being cleared by
+the manual actions that turned the light and fan on. And it confirms the cooking session
+independently: `@60` sat at 3 throughout, so the light and fan really did **auto-start** rather than
+being switched by hand.
+
+Finding it needed a known starting state. The earlier attempt diffed the settings blocks around
+enabling auto in the app and saw nothing, because our own probes had already left both autos armed —
+the app changed nothing. Repeating it from a known-disarmed state made the byte obvious.
 
 ### Writing commands
 

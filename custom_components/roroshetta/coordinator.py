@@ -108,6 +108,7 @@ class RoroshettaData:
     light_brightness: int | None = None
     light_color: int | None = None
     fan_speed: int | None = None
+    auto_flags: int | None = None
     activity: int | None = None
     alarm_level: int | None = None
     power: int | None = None
@@ -551,6 +552,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         self.data.light_brightness = get_u16_le(54, 1)
         self.data.light_color = get_u16_le(55, 1)
         self.data.fan_speed = get_u16_le(57, 1)
+        self.data.auto_flags = get_u16_le(60, 1)
         self.data.grease_filter = get_u16_le(59, 1)
 
         _LOGGER.debug(

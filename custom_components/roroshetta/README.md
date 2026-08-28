@@ -60,6 +60,10 @@ As well as the sensors above, the integration exposes:
   feedback: byte 57 reports the actual motor speed. Note the separate **Fan Speed** *sensor* reads a
   different byte, the hood's own level index, which stays at 0 while Home Assistant drives the fan.
 - **Reset grease filter** (`button.*`) — resets the filter counter to 0 after cleaning the filter.
+- **Fan auto mode** and **Light auto mode** (`switch.*`) — whether the hood starts the fan and light
+  by itself when it detects cooking. **Any manual light or fan command disarms the matching auto
+  mode**, whether it comes from Home Assistant, the Safera app or the hood's own controls, so
+  switching the light on here stops it auto-starting next time until you turn the switch back on.
 
 ### `roroshetta.send_command`
 

@@ -16,7 +16,13 @@ from homeassistant.helpers.typing import ConfigType
 from .const import DOMAIN, SERVICE_SEND_COMMAND
 from .coordinator import RoroshettaConfigEntry, RoroshettaDataUpdateCoordinator
 
-PLATFORMS = [Platform.BUTTON, Platform.FAN, Platform.LIGHT, Platform.SENSOR]
+PLATFORMS = [
+    Platform.BUTTON,
+    Platform.FAN,
+    Platform.LIGHT,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 
 _LOGGER = logging.getLogger(__name__)
 
