@@ -22,9 +22,14 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
+    BABE_CHARACTERISTIC,
+    BABE_HANDLE,
     BEEF_CHARACTERISTIC,
+    COMMAND_MIN_INTERVAL_SECONDS,
+    COMMAND_TIMEOUT_SECONDS,
     DATA_DEVICE_INFO,
     DATA_PAIRED_ONCE,
     DEVICE_WAIT_SECONDS,
@@ -95,6 +100,12 @@ class RoroshettaData:
     grease_filter: int | None = None
     light: float | None = None
     fan: float | None = None
+    # Raw bytes behind the two scaled fields above. @53 is a preset index when
+    # set over BLE and a brightness when set at the hood, so the light entity
+    # only uses it for on/off. @57 is the actual motor speed, 0-255, in the same
+    # units CMD_MOTOR_RAW_SPEED takes — confirmed by a commanded sweep.
+    light_raw: int | None = None
+    fan_speed: int | None = None
     activity: int | None = None
     alarm_level: int | None = None
     power: int | None = None
@@ -133,6 +144,9 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         self._connection_task: asyncio.Task[None] | None = None
         self._connected = False
         self._last_notification: float | None = None
+        self._command_char: object | int | None = None
+        self._command_lock = asyncio.Lock()
+        self._last_command: float | None = None
         _LOGGER.debug("Roroshetta coordinator initialized successfully")
 
     @property
@@ -206,6 +220,81 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
             serial_number=values.get("serial_number"),
             hw_version=values.get("hw_version"),
             sw_version=format_sw_version(values),
+        )
+
+    def _resolve_command_char(self, client: BleakClient) -> object | int:
+        """Find the command characteristic once per connection.
+
+        Looking it up by UUID string at write time has failed with
+        ``BleakCharacteristicNotFoundError`` on connections whose cached GATT
+        table was incomplete, even while notifications on the same service were
+        streaming. Resolving the object up front avoids that, and the handle is
+        a last resort if the table really does not list it.
+        """
+        for service in client.services:
+            for characteristic in service.characteristics:
+                if characteristic.uuid.lower() == BABE_CHARACTERISTIC:
+                    return characteristic
+        _LOGGER.warning(
+            "Command characteristic %s not in the GATT table; falling back to "
+            "handle %s",
+            BABE_CHARACTERISTIC,
+            BABE_HANDLE,
+        )
+        return BABE_HANDLE
+
+    async def async_send_command(self, code: int, param: int = 0) -> None:
+        """Write one command to the hood.
+
+        The payload is a 4-byte little-endian code followed by a 4-byte
+        little-endian parameter. Raises ``HomeAssistantError`` rather than
+        failing silently, so a service call reports the problem to the caller.
+        """
+        client = self._client
+        if client is None or not self._connected or not client.is_connected:
+            raise HomeAssistantError(
+                "Roroshetta is not connected, so the command was not sent"
+            )
+        for value, name in ((code, "code"), (param, "parameter")):
+            if not 0 <= value <= 0xFFFFFFFF:
+                raise HomeAssistantError(
+                    f"Command {name} {value} does not fit in 4 bytes"
+                )
+
+        payload = code.to_bytes(4, "little") + param.to_bytes(4, "little")
+
+        # Serialise commands and space them out. A burst of writes has dropped
+        # the BLE link before, which takes every entity down with it.
+        async with self._command_lock:
+            if self._last_command is not None:
+                gap = self.hass.loop.time() - self._last_command
+                if gap < COMMAND_MIN_INTERVAL_SECONDS:
+                    await asyncio.sleep(COMMAND_MIN_INTERVAL_SECONDS - gap)
+
+            target = self._command_char
+            if target is None:
+                target = self._command_char = self._resolve_command_char(client)
+
+            _LOGGER.debug(
+                "Sending command 0x%04x param=%d (%s)", code, param, payload.hex()
+            )
+            try:
+                async with asyncio.timeout(COMMAND_TIMEOUT_SECONDS):
+                    await client.write_gatt_char(target, payload, response=True)
+            except Exception as err:
+                raise HomeAssistantError(
+                    f"Failed to send command 0x{code:04x} param={param}: "
+                    f"{type(err).__name__}: {err}"
+                ) from err
+            finally:
+                self._last_command = self.hass.loop.time()
+
+        _LOGGER.info(
+            "Sent command 0x%04x param=%d; light=%s fan=%s",
+            code,
+            param,
+            self.data.light,
+            self.data.fan,
         )
 
     @property
@@ -331,6 +420,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
                 _LOGGER.debug("Connected to Roroshetta device at %s", address)
 
                 await self._async_read_device_info(client)
+                self._command_char = self._resolve_command_char(client)
 
                 if not self._paired_once and hasattr(client, "pair"):
                     await client.pair()
@@ -413,6 +503,9 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
                     except Exception:
                         pass
                 self._client = None
+                # The characteristic object belongs to this connection's GATT
+                # table; keeping it would write through a dead client.
+                self._command_char = None
                 self._set_connected(False)
 
             if self._stop_event.is_set():
@@ -453,6 +546,8 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         self.data.power = get_u16_le(46, 2)
         self.data.light = get_u16_le(53, 1) / 30
         self.data.fan = get_u16_le(56, 1) / 30
+        self.data.light_raw = get_u16_le(53, 1)
+        self.data.fan_speed = get_u16_le(57, 1)
         self.data.grease_filter = get_u16_le(59, 1)
 
         _LOGGER.debug(

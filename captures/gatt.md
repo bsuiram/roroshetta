@@ -89,31 +89,28 @@ below, so the read-back is not simply the last command sent.
 
 ## What has actually been tried (2026-08-28)
 
-`babe` **is** the command channel on this firmware, and the 8-byte code+parameter format is right.
-Results from writing to it, ordered by how solid the evidence is:
+`babe` is a working command channel on this firmware and the 8-byte code+parameter format is right.
+Everything below was confirmed with someone standing at the hood.
 
 | command | result |
 |---|---|
-| `0x2002` CMD_MOTOR_RAW_SPEED | **The motor physically ran** — heard continuously at the hood. But `fan@56` stayed 0 the whole time. |
-| `0x2005` CMD_LIGHT_PRESET | **`light@53` followed the parameter exactly**: 0 → 1 → 2 → 0. Nobody was at the hood, so whether the lamp lit is unknown. |
-| `0x2006` CMD_LIGHT_BRIGHTNESS | No effect on `@53`, with light auto mode both on and off. |
-| `0x2004` CMD_MOTOR_AUTO_MODE | No observable effect on the payload. |
+| `0x2005` CMD_LIGHT_PRESET | **Works.** Parameter 1 lights the lamp, 0 switches it off. `light@53` follows the parameter, so it holds a preset index rather than a brightness when written this way — note the hood's own controls put 90 in the same byte. |
+| `0x2006` CMD_LIGHT_BRIGHTNESS | **Works, 0-255 and monotonic.** 1 is very dim, and 200 and 255 are each visibly brighter than the last. **0 is a dim floor, not off**, so off has to go through the preset command. Nothing in the payload reports brightness back, and it resets to a dim default across an off/on cycle. |
+| `0x2002` CMD_MOTOR_RAW_SPEED | **Works, 0-255.** A commanded sweep of 0 → 50 → 100 → 180 → 255 → 0 was tracked exactly by **byte 57**, ramping between steps. Above roughly 180 the motor is not audibly different, though 57 still reports the value. |
+| `0x2009` CMD_FILTER_CHANGED | **Works.** Parameter 0 took `grease_filter@59` from 22 to 0 within four seconds — which also proves 59 really is the filter counter. |
+| `0x2004` / `0x2008` auto modes | No observable effect on this firmware. |
 
-Two things follow from that pair of results:
+**Byte 57 is the fan feedback, byte 56 is not.** `@56` is a level index the hood's own controller
+maintains: it reads 30 with the fan on low from the panel, and stays 0 the whole time a BLE speed
+command has the motor running. `@57` is the actual motor speed in the same 0-255 units the command
+takes.
 
-- **`@56` does not report BLE-commanded fan speed.** It read 30 when the fan was set from the
-  hood's own controls on 08-27, but stayed 0 while a BLE command had the motor audibly running. So
-  a fan entity built on these commands cannot read its state back from `@56` and would have to be
-  optimistic. Byte 57 is the obvious place to look for real feedback — it read 23 alongside
-  `@56`=30 on 08-27 — but has never been checked while a BLE command drove the motor.
-- **`@53` set by preset does not use the `/30` scaling.** Preset 1 and 2 put literally 1 and 2 in
-  the byte, where switching the light on at the hood put 90 there. Either `@53` holds a preset index
-  when written over BLE and a brightness otherwise, or the preset never lit the lamp at all.
+Colour is the one app feature with no known command code. It needs discovery — diff the 200-byte
+`dcba` settings block before and after changing colour in the app, or capture an Android HCI snoop.
 
 `babe` reads back the last command written, but reverts to `021000003c000000` after a reconnect, so
-it is a volatile command buffer rather than a settings register. Nothing written during these tests
-persisted: `dcba`, `dcbb`, `abba`, `babe` and `abd3` were all byte-identical to a pre-write snapshot
-afterwards.
+it is a volatile command buffer rather than a settings register. A before/after diff of `dcba`,
+`dcbb`, `abba`, `babe` and `abd3` confirmed that none of this testing changed stored configuration.
 
 ## How not to test writes
 

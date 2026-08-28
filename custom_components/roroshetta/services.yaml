@@ -1,0 +1,34 @@
+send_command:
+  name: Send command
+  description: >-
+    Write one raw command to the hood's command characteristic. The command set
+    is still being reverse-engineered, so this is deliberately raw rather than a
+    light or fan service. Known codes are documented in captures/gatt.md.
+  fields:
+    code:
+      name: Command code
+      description: >-
+        Command code, as an integer or a hex string. Known: 0x2002 fan raw
+        speed, 0x2004 fan auto mode, 0x2005 light preset, 0x2006 light
+        brightness, 0x2008 light auto mode, 0x2009 grease filter reset.
+      required: true
+      example: "0x2005"
+      selector:
+        text:
+    param:
+      name: Parameter
+      description: >-
+        Parameter for the command. Fan speed is 0-255 with 0 off; the filter
+        reset takes 0.
+      required: false
+      default: 0
+      example: 1
+      selector:
+        text:
+    device_id:
+      name: Device
+      description: Only needed if more than one hood is set up.
+      required: false
+      selector:
+        device:
+          integration: roroshetta

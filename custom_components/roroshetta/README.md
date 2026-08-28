@@ -47,6 +47,30 @@ The integration provides the following sensors:
   back down by activity, and triggers the cooktop cut-off if it passes a threshold with nobody
   present. The trip threshold is not known; the highest value ever observed is 35
 
+## Controls
+
+As well as the sensors above, the integration exposes:
+
+- **Light** (`light.*`) — on/off and brightness, 0-255. The hood reports no brightness back, so the
+  entity remembers what it last set; it also re-applies brightness after switching on, because the
+  hood drops to a dim default across an off/on cycle.
+- **Fan** (`fan.*`) — on/off and speed as a percentage of the raw 0-255 range. This one has real
+  feedback: byte 57 reports the actual motor speed. Note the separate **Fan Speed** *sensor* reads a
+  different byte, the hood's own level index, which stays at 0 while Home Assistant drives the fan.
+- **Reset grease filter** (`button.*`) — resets the filter counter to 0 after cleaning the filter.
+
+### `roroshetta.send_command`
+
+A raw escape hatch for reverse-engineering: writes an arbitrary command code and parameter to the
+hood's command characteristic. Known codes are in `const.py` and `captures/gatt.md`. Deliberately
+raw, since the command set is still being mapped — the light, fan and filter commands were all
+found this way.
+
+    action: roroshetta.send_command
+    data:
+      code: "0x2005"
+      param: 1
+
 ## Debug Logging
 
 The integration includes comprehensive debug logging. To enable debug logging:

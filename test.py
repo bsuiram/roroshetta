@@ -71,7 +71,8 @@ def decode_env1(data: bytes):
     power         = get_u16_le(46,2)
     light         = get_u16_le(53,1) / 30
     fan           = get_u16_le(56,1) / 30
-    grease_filter = get_u16_le(59,1) # filter saturation %, climbs ~1 per 15 h
+    grease_filter = get_u16_le(59,1) # filter saturation %, reset by CMD_FILTER_CHANGED
+    fan_speed     = get_u16_le(57,1) # actual motor speed 0-255, same units as CMD_MOTOR_RAW_SPEED
     
     if output_env:
         env = {

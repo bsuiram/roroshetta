@@ -96,6 +96,10 @@ push data → sensor entities read from `coordinator.data`.
   newer than `STALE_AFTER_SECONDS`, and `_set_connected()` calls `async_update_listeners()` on
   transition so entities re-render the instant a link drops. Caveat: staleness alone does not
   self-trigger a re-render — only connect/disconnect pushes do.
+- **Four platforms: `button`, `fan`, `light`, `sensor`.** The three control platforms share
+  `entity.py`'s `RoroshettaEntity` for device wiring and availability. `sensor.py` deliberately does
+  **not** use it — its entities predate the base and switching them over risks changing unique ids
+  or names, which would orphan history. New platforms should use it.
 - **`sensor.py` is table-driven.** Each sensor is a `RoroshettaSensorEntityDescription` with a
   `value_fn(coordinator)`; adding a sensor means adding a field to the `RoroshettaData` dataclass,
   a decode line in `_parse_data`, and one entry in the `SENSORS` tuple.
@@ -208,8 +212,9 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
 - **Intermediate light and fan steps have never been observed from the hood's own controls.** Set
   that way, @53 has only ever read 0 or 90 and @56 only 0 or 30, so the `/30` scaling is an
   inference from two points, not a measurement. BLE presets put 1 and 2 in @53, which does not fit
-  that scaling at all — see "Controlling the hood". @57 tracks the fan (0 off, 23 on low) and is
-  unmapped.
+  that scaling at all — see "Controlling the hood". @57 is now mapped: it is the raw motor speed.
+- **The light's colour has no known command.** It is the one thing the Safera app can do that we
+  cannot.
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via
@@ -217,25 +222,52 @@ Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂
 
 ## Controlling the hood
 
-`babe` is a working command channel on this firmware, confirmed 2026-08-28. `0x2002`
-(CMD_MOTOR_RAW_SPEED) **audibly ran the motor**, and `0x2005` (CMD_LIGHT_PRESET) drove `light@53`
-to match its parameter (0 → 1 → 2 → 0). `0x2006` (brightness) and `0x2004` (motor auto mode) did
-nothing observable. Full results and the command table are in `captures/gatt.md`.
+**Light, fan and the grease filter reset all work over BLE**, confirmed against the real hood on
+2026-08-28 with someone standing at it. Commands go to `babe` as a 4-byte LE code plus a 4-byte LE
+parameter; the codes live in `const.py`.
 
-Two findings shape anything built on this:
+| what | command | parameter | feedback |
+|---|---|---|---|
+| light on/off | `0x2005` CMD_LIGHT_PRESET | 1 on, 0 off | `@53` non-zero when lit |
+| light brightness | `0x2006` CMD_LIGHT_BRIGHTNESS | 0-255, monotonic | **none** |
+| fan speed | `0x2002` CMD_MOTOR_RAW_SPEED | 0-255, 0 stops | `@57`, the real speed |
+| filter reset | `0x2009` CMD_FILTER_CHANGED | 0 | `@59` drops to 0 |
 
-- **`@56` does not report BLE-commanded fan speed.** It read 30 when the fan was set at the hood's
-  own controls, but stayed 0 while a BLE command had the motor running. A fan entity would have to
-  be optimistic about its state. Byte 57 is the untested candidate for real feedback.
-- **`@53` set by preset holds 1 or 2, not the 90 seen when the light is switched at the hood**, so
-  the `/30` scaling does not apply to preset-written values, and it is still unknown whether the
-  preset actually lights the lamp — nobody was watching when it worked.
+`0x2004` and `0x2008` (the auto modes) had no observable effect on this firmware.
 
-**Do not test writes from a boot-time experiment.** Writing seconds after `start_notify` returned
+Four things that shaped the implementation, all of them learned the hard way:
+
+- **Brightness has no feedback and does not survive an off/on cycle.** The hood drops back to a dim
+  default, so `async_turn_on` re-applies the last commanded brightness rather than assuming it
+  stuck. `light.py` tracks brightness optimistically because nothing in the payload reports it.
+- **Brightness 0 is a dim floor, not off.** Turning the lamp off has to go through the preset
+  command. Confirmed by eye.
+- **`@56` and `@57` are different things.** `@56` is a level index the hood's own controller
+  maintains — it reads 30 with the fan on low from the panel and stays **0** while a BLE speed
+  command drives the motor. `@57` is the actual motor speed in the same 0-255 units the command
+  takes, and it tracked a commanded sweep (0 → 50 → 100 → 180 → 255 → 0) exactly, ramping between
+  steps. The fan entity uses `@57`, so it has real feedback; the `fan_level` *sensor* still reads
+  `@56` and will sit at 0 whenever HA is driving the fan. That is not a bug.
+- **Above roughly 180 the motor is not audibly different**, though `@57` still reports the higher
+  value.
+
+Colour is the one app feature with no known command. There is no documented code for it, so it
+needs discovery rather than testing — either diffing the 200-byte `dcba` settings block before and
+after changing colour in the Safera app, or an Android HCI snoop.
+
+### Writing commands
+
+`coordinator.async_send_command(code, param)` is the only write path. It resolves the characteristic
+object once per connection (`_resolve_command_char`), serialises writes behind a lock, spaces them
+by `COMMAND_MIN_INTERVAL_SECONDS`, and raises `HomeAssistantError` rather than failing quietly. The
+`roroshetta.send_command` service exposes it raw for experimentation — that is deliberate while the
+command set is still being mapped, and it is how everything above was discovered without a redeploy
+per attempt.
+
+**Do not write from a boot-time experiment.** Writing seconds after `start_notify` returned
 `[Errno 104] Connection reset by peer`, dropped the link and left every entity unavailable until a
 restart; repeated restarts compound it, because the hood accepts one central at a time and each
-restart re-takes the slot. Build an on-demand path — a service or button entity — and write from an
-established, healthy connection.
+restart re-takes the slot. Let the link settle, then drive writes on demand.
 
 ## Traps that already bit this code
 
