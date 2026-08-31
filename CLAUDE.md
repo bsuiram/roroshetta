@@ -339,9 +339,24 @@ The event log recorded it as well, which is what it was added for:
 | code | meaning |
 |---|---|
 | 1, 3 | cooking session start |
+| **100** | **OK button pressed** — identified by pressing it and watching the event appear |
 | **103** | alarm raised — same second `@33` went to 7 |
 | **104** | cooktop cut — same second `@33` went to 8 |
 | 6 | after acknowledgement |
+
+**There is no "time since OK pressed" counter on the hood.** It timestamps the press in its own
+uptime as code 100, and wall-clock is derived by subtracting from the current uptime — which is
+what the `Last OK pressed` timestamp sensor does. It resolves the moment the event arrives and
+caches it; recomputing every frame would make the timestamp jitter by a second forever.
+
+Two traps in doing that. The event log is read **on connect, before the first notification has
+delivered an uptime to subtract from**, so a press seen there has to be held and resolved when a
+frame arrives or it is silently dropped. And the log is a rolling buffer that empties itself, so an
+empty read must not wipe what is already known.
+
+`abdf` is **not** where the OK press registers — its six u16 LE counters did not move at all for a
+press. They all decrease over days and are still unexplained; the external table's "day statistics"
+label does not fit something that counts down.
 
 `alarm_level`'s `PERCENTAGE` unit in `sensor.py` is therefore **correct**, vindicating the external
 table over the doubt recorded here earlier.

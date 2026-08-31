@@ -34,6 +34,14 @@ DCBA_HANDLE = 38
 ABCF_CHARACTERISTIC = "0000abcf-1212-efde-1523-785fef13d123"
 ABCF_HANDLE = 50
 EVENT_RECORD_SIZE = 5
+
+# Event codes seen so far. 100 was identified by pressing the button and
+# watching it appear; 103 and 104 landed on the exact seconds byte 33 went to
+# pre-alarm and to cooktop-cut during a deliberate trip. 1, 3 and 6 appeared
+# around a cooking session and are unidentified.
+EVENT_OK_PRESSED = 100
+EVENT_ALARM_RAISED = 103
+EVENT_COOKTOP_CUT = 104
 ABBA_HANDLE = 36
 SETTINGS_LENGTH = 200
 

@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from bleak import BleakClient
@@ -33,6 +34,7 @@ from .const import (
     BABE_HANDLE,
     DCBA_CHARACTERISTIC,
     DCBA_HANDLE,
+    EVENT_OK_PRESSED,
     EVENT_RECORD_SIZE,
     BEEF_CHARACTERISTIC,
     COMMAND_MIN_INTERVAL_SECONDS,
@@ -166,6 +168,9 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
         self._settings_read_char: object | int | None = None
         self._settings: bytes | None = None
         self._events: list[tuple[int, int]] = []
+        self._counters: list[int] = []
+        self._last_ok_press: datetime | None = None
+        self._pending_ok_uptime: int | None = None
         self._command_lock = asyncio.Lock()
         self._last_command: float | None = None
         _LOGGER.debug("Safera coordinator initialized successfully")
@@ -348,7 +353,66 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
                 _EVENT_LOGGER.warning(
                     "Device event: code %d (0x%02x) at uptime %d s", code, code, timestamp
                 )
-        self._events = events
+                if code == EVENT_OK_PRESSED:
+                    self._record_ok_press(timestamp)
+        # The log is a rolling buffer that empties itself, so an empty read is
+        # normal and must not wipe what we already know.
+        if events:
+            self._events = events
+
+    def _handle_counters(self, data: bytes) -> None:
+        """Log the abdf counters whenever any of them changes.
+
+        Six u16 LE values. All six were seen to decrease across three days, so
+        they count down toward something; what resets them is unknown.
+        """
+        values = [
+            int.from_bytes(data[i : i + 2], "little")
+            for i in range(0, len(data) - 1, 2)
+        ]
+        if values != self._counters:
+            if self._counters:
+                changed = [
+                    f"[{i}] {old} -> {new}"
+                    for i, (old, new) in enumerate(zip(self._counters, values))
+                    if old != new
+                ]
+                _EVENT_LOGGER.warning("abdf counters changed: %s", ", ".join(changed))
+            else:
+                _EVENT_LOGGER.warning("abdf counters: %s", values)
+            self._counters = values
+
+    def _record_ok_press(self, event_uptime: int) -> None:
+        """Turn an event's device uptime into a wall-clock time, once.
+
+        The hood stores no "time since OK" counter — it timestamps the press in
+        its own uptime, so the wall-clock moment is derived by subtracting from
+        the current uptime. Computed once per event and cached: recomputing it
+        on every frame would make the timestamp jitter.
+        """
+        uptime = self.data.uptime
+        if uptime is None:
+            # The event log is read on connect, before the first notification
+            # has delivered an uptime to subtract from. Hold it and resolve as
+            # soon as a frame arrives, or the press is silently dropped.
+            self._pending_ok_uptime = event_uptime
+            _EVENT_LOGGER.debug("OK press held until uptime is known")
+            return
+        self._last_ok_press = datetime.now(UTC) - timedelta(
+            seconds=max(0, uptime - event_uptime)
+        )
+        _EVENT_LOGGER.debug("OK button last pressed at %s", self._last_ok_press)
+        self.async_update_listeners()
+
+    @property
+    def last_ok_press(self) -> datetime | None:
+        """When the hood's OK button was last pressed, or None if unseen."""
+        return self._last_ok_press
+
+    @property
+    def counters(self) -> list[int]:
+        """Most recent abdf counter values."""
+        return self._counters
 
     @property
     def events(self) -> list[tuple[int, int]]:
@@ -612,6 +676,20 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
                         lambda _sender, data: self._handle_event_log(bytes(data)),
                     )
                     _LOGGER.debug("Subscribed to the device event log")
+                    # abdf holds six u16 LE counters that all decrease over
+                    # time, so it is countdowns rather than the "day statistics"
+                    # the external table calls it. Subscribed and logged on
+                    # change to find out what resets them — a "time since the OK
+                    # button was pressed" timer is the current suspicion.
+                    abdf = self._resolve_char(
+                        client, "0000abdf-1212-efde-1523-785fef13d123", 53
+                    )
+                    self._handle_counters(bytes(await client.read_gatt_char(abdf)))
+                    await client.start_notify(
+                        abdf,
+                        lambda _sender, data: self._handle_counters(bytes(data)),
+                    )
+                    _LOGGER.debug("Subscribed to the abdf counters")
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.warning("Could not subscribe to the event log: %s", err)
 
@@ -726,6 +804,9 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
         self.data.co2 = get_u16_le(15, 2)
         self.data.tvoc = get_u16_le(17, 2)
         self.data.uptime = get_u16_le(36, 3)
+        if self._pending_ok_uptime is not None:
+            pending, self._pending_ok_uptime = self._pending_ok_uptime, None
+            self._record_ok_press(pending)
         self.data.alarm_level = get_u16_le(44, 1)
         self.data.activity = get_u16_le(45, 1)
         self.data.power = get_u16_le(46, 2)

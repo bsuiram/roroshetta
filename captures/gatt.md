@@ -68,7 +68,7 @@ it independently; the naming below is theirs, cross-checked against this hood wh
 | `dcba` | READ_SETTINGS | 200-byte configuration block |
 | `abba` | WRITE_SETTINGS | configuration writes |
 | `abd1` | CLOUD_WIFI_STATUS | WiFi/cloud state — this is where the SSID appears |
-| `abdf` | DAY_STATISTICS | daily statistics |
+| `abdf` | DAY_STATISTICS | six u16 LE counters that all **decrease** over days — countdowns, not statistics, so the external label does not fit. Unmoved by an OK press. Unexplained |
 | `abcf` | EVENT_LOG | device event history |
 | `abd2` | GDT_DATA | hood-specific data |
 | `abd3` | GDT_COMMAND | hood commands |
@@ -148,6 +148,12 @@ A u16 count followed by 5-byte records of **(event code, u32 LE device uptime in
 real capture `0200646a9a330064659a3300` decodes as two events, both code 100, at uptimes 3381866 and
 3381861 — five seconds apart and just under the 3384730 s the uptime sensor read at the time, which
 is what identifies the timestamps as uptime rather than wall clock.
+
+Codes identified so far: **100 = OK button pressed** (confirmed by pressing it and watching the
+event appear), **103 = alarm raised** and **104 = cooktop cut** (both landing on the same seconds as
+the byte-33 transitions during a deliberate trip). Codes 1, 3 and 6 appear around cooking sessions
+and are unidentified. The two code-100 events in the very first capture were simply earlier button
+presses.
 
 It is rolling or volatile: those two events were gone three days later, the characteristic reading
 `0000`. The integration subscribes to it on connect, since this is the most likely place an alarm

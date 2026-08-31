@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -42,7 +43,7 @@ _LOGGER = logging.getLogger(__name__)
 class SaferaSensorEntityDescription(SensorEntityDescription):
     """Describes Safera sensor entity."""
 
-    value_fn: Callable[[SaferaDataUpdateCoordinator], StateType]
+    value_fn: Callable[[SaferaDataUpdateCoordinator], StateType | datetime]
 
 
 SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
@@ -141,6 +142,12 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
         value_fn=lambda coordinator: coordinator.data.power,
     ),
     SaferaSensorEntityDescription(
+        key="last_ok_press",
+        name="Last OK pressed",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        value_fn=lambda coordinator: coordinator.last_ok_press,
+    ),
+    SaferaSensorEntityDescription(
         key="device_state",
         name="Device state",
         device_class=SensorDeviceClass.ENUM,
@@ -210,7 +217,7 @@ class SaferaSensor(CoordinatorEntity, SensorEntity):
         )
 
     @property
-    def native_value(self) -> StateType:
+    def native_value(self) -> StateType | datetime:
         """Return the native value of the sensor."""
         return self.entity_description.value_fn(self.coordinator)
 
