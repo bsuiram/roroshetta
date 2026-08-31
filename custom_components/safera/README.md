@@ -33,8 +33,9 @@ The integration provides the following sensors:
   reverse-engineering of the protocol labels the same field Surface Temperature
 - **Humidity**: Relative humidity in %
 - **CO2**: Carbon dioxide concentration in ppm
-- **TVOC**: Total Volatile Organic Compounds (reported as µg/m³; unit not yet confirmed against the app)
-- **PM2.5**: Particulate matter 2.5 in µg/m³
+- **TVOC**: Total Volatile Organic Compounds in µg/m³ — unit confirmed against the app 2026-08-31
+- **PM2.5**: Particulate matter 2.5 in µg/m³. Has read 0 in every frame ever captured, matching
+  the app, so the offset is confirmed but the scaling is not
 - **AQI**: Air Quality Index
 - **Power**: Power drawn by the cooktop, in W (0 when the hob is off; observed up to 2660 W)
 - **Uptime**: Device uptime in seconds

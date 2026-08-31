@@ -190,8 +190,11 @@ payload and stops at offset 47. Our frames are consistently 69 bytes and carry `
 firmware generation (this hood reports hardware 3.2.255.0, firmware 13, software 75). Two of its
 offsets do not survive contact with our frames, so **prefer the measured values here**:
 
-- its particle index at `@12-13 / 5` reads **0.00** on our frames, while our `pm25` at `@13 / 1000`
-  gives 5.12 alongside an AQI of 19;
+- ~~its particle index at `@12-13 / 5`~~ **it was right and we were wrong.** A 2026-08-31 app
+  screenshot shows PM2.5 = **0** while our `@13 / 1000` read 2.56. Byte 13 is zero in all 12604
+  frames ever captured, so that decode really computed `byte14 × 0.256` and invented three decimals.
+  `pm25` is now `@12-13 / 5`. Note only the *offset* is confirmed: `@12-13` has never been anything
+  but zero, so the `/5` scaling is still untested;
 - its heat index at `@24 × 2` gives 48 °C, which is not credible.
 
 Everything else it lists agrees, including several of our constant bytes: `@26` battery (100),
@@ -225,6 +228,15 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
   the `/30` level index, with `@57` reading raw speeds 23, 26, 36 and 82 respectively — markedly
   non-linear, and all well below the 0-255 range a BLE speed command can reach.
 
+
+**tVOC's unit is µg/m³, not ppb.** The app displays "16 tVOC µg/m³" for the value our frames carry,
+so our declaration is right and the external table is wrong on this firmware. Confirmed 2026-08-31,
+after being marked unconfirmed since the beginning.
+
+**Air quality readings can freeze.** On 2026-08-31 AQI, tVOC, CO₂ and byte 14 each held exactly one
+value across 3455 frames and 2.5 hours (3, 16, 427, 10), where tVOC alone took 303 distinct values
+on 08-28. The app showed the same frozen numbers and the sensor-error bitmask at `@34-35` read 0, so
+it is the device rather than the decode — but do not mistake a frozen sensor for stable air.
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via

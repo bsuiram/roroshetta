@@ -118,8 +118,8 @@ class SaferaData:
     pm25: float | None = None
     aqi: int | None = None
     grease_filter: int | None = None
-    light: float | None = None
-    fan: float | None = None
+    light: int | None = None
+    fan: int | None = None
     # Raw bytes behind the two scaled fields above, all confirmed 1:1 against
     # commanded values: @53 on/off, @54 brightness, @55 colour (warm to cool),
     # @57 the actual motor speed in the same 0-255 units the fan command takes.
@@ -810,7 +810,11 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
         self.data.heat_index = (get_u16_le(2, 2) + 10000) / 100 - 150
         self.data.humidity = get_u16_le(4, 2) / 100
         self.data.aqi = get_u16_le(10, 2)
-        self.data.pm25 = get_u16_le(13, 2) / 1000
+        # @12-13 / 5, per magicus/safera-ble. The old @13 / 1000 was wrong: byte
+        # 13 is zero in all 12604 frames ever captured, so it really computed
+        # byte14 * 0.256 and invented three decimals of precision. The app reads
+        # 0.0 when this decode reads 0.0, which is what settles it.
+        self.data.pm25 = get_u16_le(12, 2) / 5
         self.data.co2 = get_u16_le(15, 2)
         self.data.tvoc = get_u16_le(17, 2)
         self.data.uptime = get_u16_le(36, 3)
@@ -828,7 +832,8 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
         # time.
         light_raw = get_u16_le(53, 1)
         self.data.light = light_raw // 30 if light_raw >= 30 else light_raw
-        self.data.fan = get_u16_le(56, 1) / 30
+        # Whole preset numbers, matching the app's 0-4. Byte 56 is level * 30.
+        self.data.fan = get_u16_le(56, 1) // 30
         self.data.light_raw = get_u16_le(53, 1)
         self.data.light_brightness = get_u16_le(54, 1)
         self.data.light_color = get_u16_le(55, 1)

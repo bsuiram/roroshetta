@@ -62,7 +62,7 @@ def decode_env1(data: bytes):
     heat_index    = (get_u16_le(2,2) + 10000) /100 - 150
     humidity      = get_u16_le(4,2) / 100
     aqi           = get_u16_le(10,2)
-    pm25          = get_u16_le(13,2) / 1000
+    pm25          = get_u16_le(12,2) / 5    # was 13,2/1000; app reads 0 when this reads 0
     co2           = get_u16_le(15,2)
     tvoc          = get_u16_le(17,2)
     uptime        = get_u16_le(36,3)
