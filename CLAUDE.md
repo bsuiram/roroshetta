@@ -199,9 +199,10 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
 
 ### Still open
 
-- **No alarm trip has ever been observed**, so `alarm_level`'s threshold and units are unknown, and
-  it is unclear whether any field reports the power actually being cut. The hood's self-test is the
-  cheap way to exercise this without a genuinely dangerous pan.
+- **No alarm trip has ever been observed**, so `alarm_level`'s threshold is unknown — the highest
+  ever seen is 77, during a taco session. The hood's self-test is the cheap way to exercise this
+  without a genuinely dangerous pan. **The integration now subscribes to the device event log**
+  (see below) so a trip will be captured live rather than missed.
 - **Bytes 6-7 are ambient light**, `value / 32` lux per `magicus/safera-ble`, and both parsers
   ignore them. That reads as 25-157 lux (mean 108) on our frames, right for a kitchen, and explains
   the dips when someone is at the hob as shadowing: mean 114 lux with nobody present versus 100 lux
@@ -313,6 +314,28 @@ three light presets.
 run while the coordinator still counts as disconnected, so reading earlier in the connect path fails
 every time.
 
+### Where an alarm should register
+
+`abcf` is the device event log: **a u16 count followed by 5-byte records of (event code, u32 LE
+device uptime in seconds)**. It reads and notifies, so the coordinator subscribes on connect and
+logs anything new on `custom_components.safera.coordinator.events`.
+
+It is a rolling or volatile buffer, not a permanent history: it held two code-100 events on
+2026-08-28 and read empty (`0000`) three days later, so a baseline reading of zero is normal.
+
+Nothing here is confirmed against a real alarm, because none has ever fired. Other places worth
+watching when one does:
+
+- `@28` "Alarm Status" in the external table — a constant **1** in every capture, idle and cooking
+- `@33` "Device State" — a constant **2**
+- `@43` Activity Type — seen as 0 idle and 2 cooking; an alarm may add a value
+- **`power @46-47` dropping to zero while the hob is still switched on** — the actual safety action
+- `abcd` (178 bytes) and `abce` (183 bytes), both read+notify and currently all zero, may be a
+  longer history that only fills on events
+
+Note "Stove Alarm Stop" is **disabled** on this hood, so an alarm will *not* force ventilation to
+preset 0. That side effect is unavailable as a signal unless the setting is turned on.
+
 ### Writing commands
 
 `coordinator.async_send_command(code, param)` is the only write path. It resolves the characteristic
@@ -329,7 +352,7 @@ restart re-takes the slot. Let the link settle, then drive writes on demand.
 
 ## Traps that already bit this code
 
-Three bugs here cost real debugging time and are easy to reintroduce:
+Four bugs here cost real debugging time and are easy to reintroduce:
 
 - **`asyncio.wait()` requires tasks.** Passing bare coroutines raises `TypeError: Passing coroutines
   is forbidden` on Python 3.11+. It fired every connection right after `start_notify`, got swallowed
@@ -338,6 +361,10 @@ Three bugs here cost real debugging time and are easy to reintroduce:
 - **`BleakClient.set_disconnected_callback` no longer exists** (removed in bleak 0.19). The old code
   guarded it with `hasattr`, so it silently did nothing and dropped links were never noticed. The
   callback must be passed to `establish_connection(...)` / `BleakClient(...)` at construction.
+- **`info` from this component is invisible at Home Assistant's default log level.** Twice now a
+  failure has hidden there: the settings read that left eleven entities unavailable with no visible
+  cause, and event-log lines that never appeared. Anything that must be noticed without someone
+  having turned debug on first has to be `warning`.
 - **`write_gatt_char` by UUID string can fail while notifications on the same service work.**
   Writing to `"0000babe-…"` raised `BleakCharacteristicNotFoundError` on connections where
   `start_notify` on `beef` — same service — was streaming fine, which is the signature of a partial

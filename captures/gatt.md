@@ -134,6 +134,17 @@ Establishing a known-disarmed state first is what made it fall out.
 panel, and stays 0 the whole time a BLE speed command has the motor running. `@57` is the actual
 motor speed in the same 0-255 units the command takes.
 
+### The event log at `abcf`
+
+A u16 count followed by 5-byte records of **(event code, u32 LE device uptime in seconds)**. The
+real capture `0200646a9a330064659a3300` decodes as two events, both code 100, at uptimes 3381866 and
+3381861 — five seconds apart and just under the 3384730 s the uptime sensor read at the time, which
+is what identifies the timestamps as uptime rather than wall clock.
+
+It is rolling or volatile: those two events were gone three days later, the characteristic reading
+`0000`. The integration subscribes to it on connect, since this is the most likely place an alarm
+will register — though that is unconfirmed, no alarm having ever fired.
+
 ### The settings block, and how to write it
 
 `dcba` reads 200 bytes of configuration; `abba` writes into it as **two bytes, offset then value**.

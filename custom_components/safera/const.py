@@ -26,6 +26,14 @@ BABE_HANDLE = 42
 DCBA_CHARACTERISTIC = "0000dcba-1212-efde-1523-785fef13d123"
 ABBA_CHARACTERISTIC = "0000abba-1212-efde-1523-785fef13d123"
 DCBA_HANDLE = 38
+
+# Device event log. Read and notify, laid out as a u16 count followed by
+# 5-byte records of (event code, u32 LE device uptime in seconds). No alarm has
+# ever been observed, so which code an alarm uses is unknown — the point of
+# subscribing is to catch it the moment one fires.
+ABCF_CHARACTERISTIC = "0000abcf-1212-efde-1523-785fef13d123"
+ABCF_HANDLE = 50
+EVENT_RECORD_SIZE = 5
 ABBA_HANDLE = 36
 SETTINGS_LENGTH = 200
 

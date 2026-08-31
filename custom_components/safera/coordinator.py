@@ -27,10 +27,13 @@ from homeassistant.exceptions import HomeAssistantError
 from .const import (
     ABBA_CHARACTERISTIC,
     ABBA_HANDLE,
+    ABCF_CHARACTERISTIC,
+    ABCF_HANDLE,
     BABE_CHARACTERISTIC,
     BABE_HANDLE,
     DCBA_CHARACTERISTIC,
     DCBA_HANDLE,
+    EVENT_RECORD_SIZE,
     BEEF_CHARACTERISTIC,
     COMMAND_MIN_INTERVAL_SECONDS,
     COMMAND_TIMEOUT_SECONDS,
@@ -63,6 +66,11 @@ _LOGGER = logging.getLogger(__name__)
 # Emits one hex line per frame (~1/second), for mapping the payload offsets
 # that are still unknown. See CLAUDE.md.
 _FRAME_LOGGER = logging.getLogger(f"{__name__}.frames")
+
+# Device events on their own logger, at **warning**: they are rare, each one
+# matters, and Home Assistant's default level here hides info. An alarm trip has
+# never been captured, so the codes are unmapped — see captures/gatt.md.
+_EVENT_LOGGER = logging.getLogger(f"{__name__}.events")
 
 type SaferaConfigEntry = ConfigEntry[SaferaDataUpdateCoordinator]
 
@@ -156,6 +164,7 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
         self._settings_write_char: object | int | None = None
         self._settings_read_char: object | int | None = None
         self._settings: bytes | None = None
+        self._events: list[tuple[int, int]] = []
         self._command_lock = asyncio.Lock()
         self._last_command: float | None = None
         _LOGGER.debug("Safera coordinator initialized successfully")
@@ -310,6 +319,40 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
             self.data.light,
             self.data.fan,
         )
+
+    @staticmethod
+    def _parse_event_log(data: bytes) -> list[tuple[int, int]]:
+        """Decode the event log: a count, then (code, uptime) records."""
+        if len(data) < 2:
+            return []
+        count = int.from_bytes(data[0:2], "little")
+        events: list[tuple[int, int]] = []
+        offset = 2
+        while offset + EVENT_RECORD_SIZE <= len(data) and len(events) < count:
+            code = data[offset]
+            timestamp = int.from_bytes(
+                data[offset + 1 : offset + EVENT_RECORD_SIZE], "little"
+            )
+            events.append((code, timestamp))
+            offset += EVENT_RECORD_SIZE
+        return events
+
+    def _handle_event_log(self, data: bytes) -> None:
+        """Log any event the hood has added since we last looked."""
+        _EVENT_LOGGER.debug("Event log: %s", data.hex())
+        events = self._parse_event_log(data)
+        known = set(self._events)
+        for code, timestamp in events:
+            if (code, timestamp) not in known:
+                _EVENT_LOGGER.warning(
+                    "Device event: code %d (0x%02x) at uptime %d s", code, code, timestamp
+                )
+        self._events = events
+
+    @property
+    def events(self) -> list[tuple[int, int]]:
+        """Most recent device event log, as (code, uptime) pairs."""
+        return self._events
 
     @property
     def settings(self) -> bytes | None:
@@ -553,6 +596,23 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
                     "Started notification listener for characteristic %s",
                     BEEF_CHARACTERISTIC,
                 )
+
+                # The event log is where an alarm should register. Failing to
+                # subscribe must never take the sensor stream down with it.
+                try:
+                    event_char = self._resolve_char(
+                        client, ABCF_CHARACTERISTIC, ABCF_HANDLE
+                    )
+                    self._handle_event_log(
+                        bytes(await client.read_gatt_char(event_char))
+                    )
+                    await client.start_notify(
+                        event_char,
+                        lambda _sender, data: self._handle_event_log(bytes(data)),
+                    )
+                    _LOGGER.debug("Subscribed to the device event log")
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.warning("Could not subscribe to the event log: %s", err)
 
                 # After _set_connected, which async_read_settings requires: it
                 # refuses to read while the coordinator still counts as
