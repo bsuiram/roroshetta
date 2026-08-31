@@ -55,7 +55,6 @@ The integration provides the following sensors:
 Filed under the device page's Diagnostic section rather than with the environment sensors, and kept
 off the auto-generated dashboard — visible and usable, just shelved as information about the device.
 
-- **Mounting height** — the configured sensor height in cm, mirrored live from the settings block
 - **Pitch** and **Roll** — auto-detected mounting angles in degrees, signed. These are live
   accelerometer readings and drift by a degree frame to frame. Pitch moved 10° between 2026-08-28
   and 08-31 without anyone noticing, so they are worth a glance if alignment ever matters
@@ -84,6 +83,8 @@ As well as the sensors above, the integration exposes:
   mode**, whether it comes from Home Assistant, the Safera app or the hood's own controls, so
   switching the light on here stops it auto-starting next time until you turn the switch back on.
 
+- **Sensor height** and **Cooker width** (cm) — the hood's mounting geometry. Editable, since they
+  are configuration rather than measurements; the height is mirrored live in the payload too
 - **Ventilation sensitivity**, **Fan presets 1-4 and Boost**, **Light preset 1-3 brightness** and
   **Light preset 1-3 colour** (`number.*`) — the same presets the Safera app edits under Cooker Hood Settings. Values come from
   the hood's own settings block, re-read once per connection and after every write, so they are not

@@ -12,7 +12,7 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.const import PERCENTAGE, UnitOfTemperature
+from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -25,7 +25,9 @@ from .const import (
     LIGHT_PRESET_BRIGHTNESS_MAX,
     SETTINGS_LIGHT_BRIGHTNESS,
     SETTINGS_LIGHT_COLOR,
+    SETTINGS_COOKER_WIDTH,
     SETTINGS_MOTOR1_PRESETS,
+    SETTINGS_SENSOR_HEIGHT,
     SETTINGS_VENT_SENSITIVITY,
 )
 from .coordinator import SaferaConfigEntry, SaferaDataUpdateCoordinator
@@ -90,6 +92,34 @@ NUMBERS: tuple[SaferaNumberDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         mode=NumberMode.SLIDER,
         to_raw=lambda value: max(0, min(100, round(value))),
+        from_raw=lambda raw: raw,
+    ),
+    # Mounting geometry, both plain centimetres in the settings block. Box mode
+    # rather than a slider: these are typed-in dimensions, not things to drag.
+    SaferaNumberDescription(
+        key="sensor_height",
+        name="Sensor height",
+        offset=SETTINGS_SENSOR_HEIGHT,
+        native_min_value=10,
+        native_max_value=200,
+        native_step=1,
+        native_unit_of_measurement=UnitOfLength.CENTIMETERS,
+        device_class=NumberDeviceClass.DISTANCE,
+        mode=NumberMode.BOX,
+        to_raw=lambda value: max(0, min(255, round(value))),
+        from_raw=lambda raw: raw,
+    ),
+    SaferaNumberDescription(
+        key="cooker_width",
+        name="Cooker width",
+        offset=SETTINGS_COOKER_WIDTH,
+        native_min_value=10,
+        native_max_value=200,
+        native_step=1,
+        native_unit_of_measurement=UnitOfLength.CENTIMETERS,
+        device_class=NumberDeviceClass.DISTANCE,
+        mode=NumberMode.BOX,
+        to_raw=lambda value: max(0, min(255, round(value))),
         from_raw=lambda raw: raw,
     ),
     _fan_preset(1, "1"),

@@ -314,8 +314,9 @@ by the same diff — a reminder that matching a value is a hypothesis, and only 
 every write** — nothing else changes it, so an edit made in the app appears on the next reconnect.
 `async_write_setting()` writes one byte and reads it back, returning what actually landed so a
 silently ignored write is distinguishable from one that took. The `number` platform builds eleven
-entities on that: ventilation sensitivity, five Motor 1 presets, and brightness plus colour for the
-three light presets.
+entities on that: ventilation sensitivity, sensor height and cooker width, five Motor 1 presets, and
+brightness plus colour for the three light presets. Height and width are **settings**, so they are
+editable numbers rather than sensors, even though the payload mirrors the height at `@8`.
 
 **The read is ordered after `_set_connected(True)` deliberately** — `async_read_settings` refuses to
 run while the coordinator still counts as disconnected, so reading earlier in the connect path fails
