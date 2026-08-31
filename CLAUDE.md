@@ -292,15 +292,18 @@ Offsets confirmed against the app's own screens:
 | `103-105` | light preset brightness, presets 1-3. Fraction of **255** |
 | `107-109` | light preset colour, presets 1-3, as `2700 + byte × 9` Kelvin |
 | `111-114` | which light preset each automatic situation uses |
+| `133` | ventilation sensitivity, a plain percentage with no scaling |
 
-Ventilation sensitivity is still unlocated; `@71`, `@133`, `@134` and `@149` all read 50 and any of
-them could be it. One app edit plus a diff would settle it.
+Ventilation sensitivity was pinned down the same way: setting it to 48 in the app changed exactly
+one byte in the whole block, `@133`. Three other offsets also happened to read 50 and were ruled out
+by the same diff — a reminder that matching a value is a hypothesis, and only a change is evidence.
 
 `coordinator.async_read_settings()` caches the block, refreshed **once per connection and after
 every write** — nothing else changes it, so an edit made in the app appears on the next reconnect.
 `async_write_setting()` writes one byte and reads it back, returning what actually landed so a
 silently ignored write is distinguishable from one that took. The `number` platform builds eleven
-entities on that: five Motor 1 presets and brightness plus colour for the three light presets.
+entities on that: ventilation sensitivity, five Motor 1 presets, and brightness plus colour for the
+three light presets.
 
 **The read is ordered after `_set_connected(True)` deliberately** — `async_read_settings` refuses to
 run while the coordinator still counts as disconnected, so reading earlier in the connect path fails

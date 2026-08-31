@@ -26,6 +26,7 @@ from .const import (
     SETTINGS_LIGHT_BRIGHTNESS,
     SETTINGS_LIGHT_COLOR,
     SETTINGS_MOTOR1_PRESETS,
+    SETTINGS_VENT_SENSITIVITY,
 )
 from .coordinator import RoroshettaConfigEntry, RoroshettaDataUpdateCoordinator
 from .entity import RoroshettaEntity
@@ -77,6 +78,20 @@ def _fan_preset(index: int, label: str) -> RoroshettaNumberDescription:
 
 
 NUMBERS: tuple[RoroshettaNumberDescription, ...] = (
+    # How eagerly the hood ramps the fan while cooking. Stored as a plain
+    # percentage with no scaling; the app calls 50 the default.
+    RoroshettaNumberDescription(
+        key="ventilation_sensitivity",
+        name="Ventilation sensitivity",
+        offset=SETTINGS_VENT_SENSITIVITY,
+        native_min_value=0,
+        native_max_value=100,
+        native_step=1,
+        native_unit_of_measurement=PERCENTAGE,
+        mode=NumberMode.SLIDER,
+        to_raw=lambda value: max(0, min(100, round(value))),
+        from_raw=lambda raw: raw,
+    ),
     _fan_preset(1, "1"),
     _fan_preset(2, "2"),
     _fan_preset(3, "3"),

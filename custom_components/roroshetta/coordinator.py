@@ -335,6 +335,10 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
             try:
                 async with asyncio.timeout(COMMAND_TIMEOUT_SECONDS):
                     self._settings = bytes(await client.read_gatt_char(target))
+                    # Logged whole so the block can be diffed around a change
+                    # made in the Safera app, which is how every offset in it
+                    # has been identified. Contains no personal data.
+                    _LOGGER.debug("Settings block: %s", self._settings.hex())
                     return self._settings
             except Exception as err:
                 raise HomeAssistantError(

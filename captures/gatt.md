@@ -148,13 +148,14 @@ to 24%, then putting it back.
 | `103-105` | light preset brightness, presets 1-3. Fraction of 255 |
 | `107-109` | light preset colour, presets 1-3 |
 | `111-114` | which light preset each automatic situation uses |
+| `133` | ventilation sensitivity, a plain percentage |
 
 The light colour bytes gave an exact Kelvin mapping: the app showed 2790 K, 2970 K and 2943 K for
 stored 10, 30 and 27, fitting **`K = 2700 + byte × 9`** perfectly. So the lamp spans 2700-4995 K in
 9 K steps.
 
-Ventilation sensitivity is not located yet — `@71`, `@133`, `@134` and `@149` all read 50, matching
-the app's "50%", and only an app edit plus a diff will say which.
+Ventilation sensitivity is `@133`, found by setting it to 48 in the app: exactly one byte in the
+whole block changed. `@71`, `@134` and `@149` also read 50 and were ruled out by the same diff.
 
 ### Reading the app's own commands
 

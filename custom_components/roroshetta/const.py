@@ -39,6 +39,7 @@ SETTINGS_VENT_LIMITS = 82  # 3 bytes, (max << 4) | min, active/after/no cooking
 SETTINGS_LIGHT_BRIGHTNESS = 103  # presets 1-3
 SETTINGS_LIGHT_COLOR = 107  # presets 1-3
 SETTINGS_LIGHT_AUTOMATION = 111  # which preset each automatic situation uses
+SETTINGS_VENT_SENSITIVITY = 133  # percent, stored directly with no scaling
 
 # Ventilation presets are stored as a fraction of 254; light brightness of 255.
 FAN_PRESET_MAX = 254

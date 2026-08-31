@@ -65,8 +65,8 @@ As well as the sensors above, the integration exposes:
   mode**, whether it comes from Home Assistant, the Safera app or the hood's own controls, so
   switching the light on here stops it auto-starting next time until you turn the switch back on.
 
-- **Fan presets 1-4 and Boost**, **Light preset 1-3 brightness** and **Light preset 1-3 colour**
-  (`number.*`) — the same presets the Safera app edits under Cooker Hood Settings. Values come from
+- **Ventilation sensitivity**, **Fan presets 1-4 and Boost**, **Light preset 1-3 brightness** and
+  **Light preset 1-3 colour** (`number.*`) — the same presets the Safera app edits under Cooker Hood Settings. Values come from
   the hood's own settings block, re-read once per connection and after every write, so they are not
   guesses. Colour is in Kelvin, 2700-4995 K in 9 K steps.
 
