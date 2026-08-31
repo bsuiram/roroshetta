@@ -205,6 +205,11 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
   the dips when someone is at the hob as shadowing: mean 114 lux with nobody present versus 100 lux
   with someone there. It also kills the earlier raw-MOX-gas lead, which rested on a `tvoc`
   correlation of +0.66 on the idle baseline that flipped to **−0.44** during cooking.
+- **`@29` is pitch and `@31` is roll**, both signed int8 degrees, and **`@8` is the configured
+  mounting height in cm** — the same value the settings block holds at `@41`. Pitch and roll are
+  live accelerometer readings: `@29` jitters across 181-183 frame to frame, and it shifted from
+  ~172 (−84°) on 2026-08-27/28 to ~182 (−74°) by 08-31, so the mounting is not fixed and a knock
+  would show up here.
 - Bytes 24-35 are near-constant in normal running, but **`@28` and `@33` are the alarm state
   machine** and both move on a trip — do not assume a constant byte is dead, which this whole file
   is a monument to. Byte 9 and byte 52 vary slightly and are unexplained.
@@ -298,6 +303,8 @@ Offsets confirmed against the app's own screens:
 | `107-109` | light preset colour, presets 1-3, as `2700 + byte × 9` Kelvin |
 | `111-114` | which light preset each automatic situation uses |
 | `133` | ventilation sensitivity, a plain percentage with no scaling |
+| `41` | sensor / hood mounting height in cm, mirrored live at payload `@8` |
+| `42` | cooker width in cm |
 
 Ventilation sensitivity was pinned down the same way: setting it to 48 in the app changed exactly
 one byte in the whole block, `@133`. Three other offsets also happened to read 50 and were ruled out

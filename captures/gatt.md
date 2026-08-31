@@ -142,6 +142,22 @@ it reached 107 after the cut. `@33` is the state: **2 normal, 7 pre-alarm, 8 coo
 normal, 0 while alarming), and `power @46-47` dropping to 0 on the cut. Event log codes **103** and
 **104** landed on the same seconds as the 7 and 8 transitions.
 
+### Mounting geometry
+
+Changing the sensor height from 70 to 54 cm and the cooker width from 90 to 100 cm in the app moved
+exactly two bytes in the settings block — `@41` and `@42` respectively — and nothing else. The
+payload carries the mounting parameters too:
+
+| payload offset | meaning |
+|---|---|
+| `@8` | configured mounting height in cm, mirroring settings `@41` |
+| `@29` | pitch, signed int8 degrees |
+| `@31` | roll, signed int8 degrees |
+
+Pitch and roll are auto-detected rather than configured, and behave like it: `@29` jitters across
+181-183 (−75° to −73°) frame to frame. It also moved from ~172 (−84°) on 2026-08-27/28 to ~182
+(−74°) by 08-31 without anyone noticing, so these are worth watching if alignment ever matters.
+
 ### The event log at `abcf`
 
 A u16 count followed by 5-byte records of **(event code, u32 LE device uptime in seconds)**. The
@@ -174,6 +190,8 @@ to 24%, then putting it back.
 | `107-109` | light preset colour, presets 1-3 |
 | `111-114` | which light preset each automatic situation uses |
 | `133` | ventilation sensitivity, a plain percentage |
+| `41` | sensor / hood mounting height, cm |
+| `42` | cooker width, cm |
 
 The light colour bytes gave an exact Kelvin mapping: the app showed 2790 K, 2970 K and 2943 K for
 stored 10, 30 and 27, fitting **`K = 2700 + byte × 9`** perfectly. So the lamp spans 2700-4995 K in
