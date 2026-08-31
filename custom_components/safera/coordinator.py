@@ -116,6 +116,7 @@ class SaferaData:
     co2: int | None = None
     tvoc: int | None = None
     pm25: float | None = None
+    illuminance: float | None = None
     aqi: int | None = None
     grease_filter: int | None = None
     light: int | None = None
@@ -809,6 +810,16 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
         self.data.temperature = (get_u16_le(0, 2) + 10000) / 100 - 150
         self.data.heat_index = (get_u16_le(2, 2) + 10000) / 100 - 150
         self.data.humidity = get_u16_le(4, 2) / 100
+        # Bytes 6-7, value / 32 lux, and **signed**. Confirmed as a real light
+        # sensor: the hood's lamp lifts it from ~20 to ~55 lux and a person at
+        # the hob shadows it downward. In true darkness it reads slightly below
+        # zero — 0xffd8 is −40, about −1.25 lux — so reading it unsigned turns
+        # a dark kitchen into 2047 lux, the exact opposite of the truth.
+        # Negative illuminance is meaningless, so it is floored at zero.
+        illuminance = get_u16_le(6, 2)
+        if illuminance > 32767:
+            illuminance -= 65536
+        self.data.illuminance = max(0.0, illuminance / 32)
         self.data.aqi = get_u16_le(10, 2)
         # @12-13 / 5, per magicus/safera-ble. The old @13 / 1000 was wrong: byte
         # 13 is zero in all 12604 frames ever captured, so it really computed

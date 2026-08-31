@@ -15,6 +15,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    LIGHT_LUX,
     DEGREE,
     EntityCategory,
     PERCENTAGE,
@@ -96,6 +97,15 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.pm25,
+    ),
+    SaferaSensorEntityDescription(
+        key="illuminance",
+        name="Ambient light",
+        device_class=SensorDeviceClass.ILLUMINANCE,
+        native_unit_of_measurement=LIGHT_LUX,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda coordinator: coordinator.data.illuminance,
     ),
     SaferaSensorEntityDescription(
         key="aqi",

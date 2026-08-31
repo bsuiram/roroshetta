@@ -65,6 +65,8 @@ def decode_env1(data: bytes):
     pm25          = get_u16_le(12,2) / 5    # was 13,2/1000; app reads 0 when this reads 0
     co2           = get_u16_le(15,2)
     tvoc          = get_u16_le(17,2)
+    _lux_raw      = get_u16_le(6,2)
+    illuminance   = max(0.0, (_lux_raw - 65536 if _lux_raw > 32767 else _lux_raw) / 32)  # lux, signed
     uptime        = get_u16_le(36,3)
     alarm_level   = get_u16_le(44,1) # interlock integrator, not a %; see captures/README.md
     activity      = get_u16_le(45,1) # presence; impulse then strict -2/frame decay

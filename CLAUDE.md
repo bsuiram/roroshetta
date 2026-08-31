@@ -206,11 +206,17 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
 ### Still open
 
 - Bytes 61-68 are static at `00 00 00 00 00 00 00 ff` and unexplained.
-- **Bytes 6-7 are ambient light**, `value / 32` lux per `magicus/safera-ble`, and both parsers
-  ignore them. That reads as 25-157 lux (mean 108) on our frames, right for a kitchen, and explains
-  the dips when someone is at the hob as shadowing: mean 114 lux with nobody present versus 100 lux
-  with someone there. It also kills the earlier raw-MOX-gas lead, which rested on a `tvoc`
-  correlation of +0.66 on the idle baseline that flipped to **−0.44** during cooking.
+- ~~Bytes 6-7~~ **resolved and exposed**: ambient light, `value / 32` lux — and **signed**. Proved
+  by switching the kitchen lights off: 55 lux with room and hood lamp, 20 with the hood lamp alone,
+  and in true darkness `0xffd8` = **−40**, about −1.25 lux. Read unsigned that becomes 2047 lux, the
+  exact opposite of the truth, so darkness looked like glare. 446 frames in the existing captures
+  were already above 32767, which means earlier "ambient light" figures quoted here — including a
+  mean of 108 lux — were computed partly from nonsense. Negative illuminance is meaningless so the
+  sensor floors at zero.
+
+  The lesson: three independent lines of evidence agreed on the unsigned read — the external table,
+  the hood lamp lifting the value, and the shadowing when someone stands at the hob — because every
+  observation had been made in a lit room. Only the untried condition exposed the sign.
 - **`@29` is pitch and `@31` is roll**, both signed int8 degrees, and **`@8` is the configured
   mounting height in cm** — the same value the settings block holds at `@41`. Pitch and roll are
   live accelerometer readings: `@29` jitters across 181-183 frame to frame, and it shifted from
