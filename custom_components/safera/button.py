@@ -1,4 +1,4 @@
-"""Button platform for Roroshetta Sense."""
+"""Button platform for Safera Sense."""
 
 from __future__ import annotations
 
@@ -9,22 +9,22 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import CMD_FILTER_CHANGED
-from .coordinator import RoroshettaConfigEntry, RoroshettaDataUpdateCoordinator
-from .entity import RoroshettaEntity
+from .coordinator import SaferaConfigEntry, SaferaDataUpdateCoordinator
+from .entity import SaferaEntity
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: RoroshettaConfigEntry,
+    entry: SaferaConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the hood buttons."""
-    async_add_entities([RoroshettaFilterResetButton(entry.runtime_data)])
+    async_add_entities([SaferaFilterResetButton(entry.runtime_data)])
 
 
-class RoroshettaFilterResetButton(RoroshettaEntity, ButtonEntity):
+class SaferaFilterResetButton(SaferaEntity, ButtonEntity):
     """Reset the grease filter counter after cleaning the filter.
 
     Verified on 2026-08-28: the counter dropped from 22 to 0 within four
@@ -34,7 +34,7 @@ class RoroshettaFilterResetButton(RoroshettaEntity, ButtonEntity):
 
     _attr_name = "Reset grease filter"
 
-    def __init__(self, coordinator: RoroshettaDataUpdateCoordinator) -> None:
+    def __init__(self, coordinator: SaferaDataUpdateCoordinator) -> None:
         """Initialise the button."""
         super().__init__(coordinator, "reset_grease_filter")
 

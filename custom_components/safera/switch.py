@@ -1,4 +1,4 @@
-"""Switch platform for Roroshetta Sense auto modes."""
+"""Switch platform for Safera Sense auto modes."""
 
 from __future__ import annotations
 
@@ -16,28 +16,28 @@ from .const import (
     CMD_LIGHT_AUTO_MODE,
     CMD_MOTOR_AUTO_MODE,
 )
-from .coordinator import RoroshettaConfigEntry, RoroshettaDataUpdateCoordinator
-from .entity import RoroshettaEntity
+from .coordinator import SaferaConfigEntry, SaferaDataUpdateCoordinator
+from .entity import SaferaEntity
 
 _LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
-class RoroshettaAutoSwitchDescription(SwitchEntityDescription):
+class SaferaAutoSwitchDescription(SwitchEntityDescription):
     """Describes one bit of the auto-mode bitmask in byte 60."""
 
     mask: int
     command: int
 
 
-SWITCHES: tuple[RoroshettaAutoSwitchDescription, ...] = (
-    RoroshettaAutoSwitchDescription(
+SWITCHES: tuple[SaferaAutoSwitchDescription, ...] = (
+    SaferaAutoSwitchDescription(
         key="fan_auto",
         name="Fan auto mode",
         mask=AUTO_MASK_FAN,
         command=CMD_MOTOR_AUTO_MODE,
     ),
-    RoroshettaAutoSwitchDescription(
+    SaferaAutoSwitchDescription(
         key="light_auto",
         name="Light auto mode",
         mask=AUTO_MASK_LIGHT,
@@ -48,17 +48,17 @@ SWITCHES: tuple[RoroshettaAutoSwitchDescription, ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: RoroshettaConfigEntry,
+    entry: SaferaConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the auto-mode switches."""
     async_add_entities(
-        RoroshettaAutoSwitch(entry.runtime_data, description)
+        SaferaAutoSwitch(entry.runtime_data, description)
         for description in SWITCHES
     )
 
 
-class RoroshettaAutoSwitch(RoroshettaEntity, SwitchEntity):
+class SaferaAutoSwitch(SaferaEntity, SwitchEntity):
     """One auto mode, backed by a bit of byte 60.
 
     The hood starts the fan and the light by itself when it detects cooking.
@@ -68,12 +68,12 @@ class RoroshettaAutoSwitch(RoroshettaEntity, SwitchEntity):
     mode off, and this switch is how to arm it again.
     """
 
-    entity_description: RoroshettaAutoSwitchDescription
+    entity_description: SaferaAutoSwitchDescription
 
     def __init__(
         self,
-        coordinator: RoroshettaDataUpdateCoordinator,
-        description: RoroshettaAutoSwitchDescription,
+        coordinator: SaferaDataUpdateCoordinator,
+        description: SaferaAutoSwitchDescription,
     ) -> None:
         """Initialise the switch."""
         super().__init__(coordinator, description.key)

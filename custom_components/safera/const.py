@@ -1,6 +1,6 @@
-"""Constants for the Roroshetta Sense integration."""
+"""Constants for the Safera Sense integration."""
 
-DOMAIN = "roroshetta"
+DOMAIN = "safera"
 
 # Services
 SERVICE_SEND_COMMAND = "send_command"
@@ -44,6 +44,11 @@ SETTINGS_VENT_SENSITIVITY = 133  # percent, stored directly with no scaling
 # Ventilation presets are stored as a fraction of 254; light brightness of 255.
 FAN_PRESET_MAX = 254
 LIGHT_PRESET_BRIGHTNESS_MAX = 255
+
+# Names the hardware actually advertises. The Roroshetta units are rebadged
+# Safera hoods, so both are matched: renaming this integration must not stop it
+# recognising a hood that still calls itself Roroshetta Sense.
+ADVERTISED_NAMES = ("Roroshetta Sense", "Safera Sense")
 
 # Advertised identifiers, kept in sync with the matchers in manifest.json
 SERVICE_UUID = "0000f00d-1212-efde-1523-785fef13d123"

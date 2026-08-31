@@ -1,4 +1,4 @@
-"""Sensor platform for Roroshetta Sense."""
+"""Sensor platform for Safera Sense."""
 
 from __future__ import annotations
 
@@ -29,9 +29,9 @@ from homeassistant.helpers.typing import StateType
 
 from .const import DOMAIN
 from .coordinator import (
-    RoroshettaConfigEntry,
-    RoroshettaDataUpdateCoordinator,
-    RoroshettaData,
+    SaferaConfigEntry,
+    SaferaDataUpdateCoordinator,
+    SaferaData,
     format_sw_version,
 )
 
@@ -39,14 +39,14 @@ _LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
-class RoroshettaSensorEntityDescription(SensorEntityDescription):
-    """Describes Roroshetta sensor entity."""
+class SaferaSensorEntityDescription(SensorEntityDescription):
+    """Describes Safera sensor entity."""
 
-    value_fn: Callable[[RoroshettaDataUpdateCoordinator], StateType]
+    value_fn: Callable[[SaferaDataUpdateCoordinator], StateType]
 
 
-SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
-    RoroshettaSensorEntityDescription(
+SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
+    SaferaSensorEntityDescription(
         key="temperature",
         name="Temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
@@ -54,7 +54,7 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.temperature,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="heat_index",
         name="Heat Index",
         device_class=SensorDeviceClass.TEMPERATURE,
@@ -62,7 +62,7 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.heat_index,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="humidity",
         name="Humidity",
         device_class=SensorDeviceClass.HUMIDITY,
@@ -70,7 +70,7 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.humidity,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="co2",
         name="CO₂",
         device_class=SensorDeviceClass.CO2,
@@ -78,7 +78,7 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.co2,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="tvoc",
         name="tVOC",
         device_class=SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS,
@@ -86,7 +86,7 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.tvoc,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="pm25",
         name="PM2.5",
         device_class=SensorDeviceClass.PM25,
@@ -94,45 +94,45 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.pm25,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="aqi",
         name="Air Quality Index",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.aqi,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="grease_filter",
         name="Grease Filter",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.grease_filter,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="light",
         name="Light Level",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.light,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="fan",
         name="Fan Level",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.fan,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="activity",
         name="Activity",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.activity,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="alarm_level",
         name="Alarm Level",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.alarm_level,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="power",
         name="Power",
         device_class=SensorDeviceClass.POWER,
@@ -140,7 +140,7 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.power,
     ),
-    RoroshettaSensorEntityDescription(
+    SaferaSensorEntityDescription(
         key="uptime",
         name="Uptime",
         device_class=SensorDeviceClass.DURATION,
@@ -153,32 +153,32 @@ SENSORS: tuple[RoroshettaSensorEntityDescription, ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: RoroshettaConfigEntry,
+    entry: SaferaConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the Roroshetta sensors."""
-    _LOGGER.debug("Setting up Roroshetta sensors for entry: %s", entry.entry_id)
+    """Set up the Safera sensors."""
+    _LOGGER.debug("Setting up Safera sensors for entry: %s", entry.entry_id)
     coordinator = entry.runtime_data
 
-    sensors = [RoroshettaSensor(coordinator, description) for description in SENSORS]
-    _LOGGER.debug("Created %d Roroshetta sensor entities", len(sensors))
+    sensors = [SaferaSensor(coordinator, description) for description in SENSORS]
+    _LOGGER.debug("Created %d Safera sensor entities", len(sensors))
     async_add_entities(sensors)
-    _LOGGER.debug("Added Roroshetta sensor entities to Home Assistant")
+    _LOGGER.debug("Added Safera sensor entities to Home Assistant")
 
 
-class RoroshettaSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a Roroshetta sensor."""
+class SaferaSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a Safera sensor."""
 
-    entity_description: RoroshettaSensorEntityDescription
+    entity_description: SaferaSensorEntityDescription
 
     def __init__(
         self,
-        coordinator: RoroshettaDataUpdateCoordinator,
-        description: RoroshettaSensorEntityDescription,
+        coordinator: SaferaDataUpdateCoordinator,
+        description: SaferaSensorEntityDescription,
     ) -> None:
         """Initialize the sensor."""
         _LOGGER.debug(
-            "Initializing Roroshetta sensor: %s for device %s",
+            "Initializing Safera sensor: %s for device %s",
             description.key,
             coordinator.address,
         )
@@ -192,7 +192,7 @@ class RoroshettaSensor(CoordinatorEntity, SensorEntity):
         info = coordinator.device_info_values
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, str(address))},
-            name="Roroshetta Sense",
+            name="Safera Sense",
             manufacturer=info.get("manufacturer", "Safera Oy"),
             model=info.get("model", "Sense"),
             serial_number=info.get("serial_number"),

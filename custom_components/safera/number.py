@@ -1,4 +1,4 @@
-"""Number platform for Roroshetta Sense preset settings."""
+"""Number platform for Safera Sense preset settings."""
 
 from __future__ import annotations
 
@@ -28,14 +28,14 @@ from .const import (
     SETTINGS_MOTOR1_PRESETS,
     SETTINGS_VENT_SENSITIVITY,
 )
-from .coordinator import RoroshettaConfigEntry, RoroshettaDataUpdateCoordinator
-from .entity import RoroshettaEntity
+from .coordinator import SaferaConfigEntry, SaferaDataUpdateCoordinator
+from .entity import SaferaEntity
 
 _LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
-class RoroshettaNumberDescription(NumberEntityDescription):
+class SaferaNumberDescription(NumberEntityDescription):
     """One editable byte of the hood's settings block."""
 
     offset: int
@@ -60,9 +60,9 @@ def _raw_to_kelvin(raw: int) -> float:
     return LIGHT_KELVIN_BASE + raw * LIGHT_KELVIN_PER_STEP
 
 
-def _fan_preset(index: int, label: str) -> RoroshettaNumberDescription:
+def _fan_preset(index: int, label: str) -> SaferaNumberDescription:
     """Motor 1 ventilation preset. Index 0 is level 0, 5 is boost."""
-    return RoroshettaNumberDescription(
+    return SaferaNumberDescription(
         key=f"fan_preset_{label.lower()}",
         name=f"Fan preset {label}",
         offset=SETTINGS_MOTOR1_PRESETS + index,
@@ -77,10 +77,10 @@ def _fan_preset(index: int, label: str) -> RoroshettaNumberDescription:
     )
 
 
-NUMBERS: tuple[RoroshettaNumberDescription, ...] = (
+NUMBERS: tuple[SaferaNumberDescription, ...] = (
     # How eagerly the hood ramps the fan while cooking. Stored as a plain
     # percentage with no scaling; the app calls 50 the default.
-    RoroshettaNumberDescription(
+    SaferaNumberDescription(
         key="ventilation_sensitivity",
         name="Ventilation sensitivity",
         offset=SETTINGS_VENT_SENSITIVITY,
@@ -98,7 +98,7 @@ NUMBERS: tuple[RoroshettaNumberDescription, ...] = (
     _fan_preset(4, "4"),
     _fan_preset(5, "Boost"),
     *(
-        RoroshettaNumberDescription(
+        SaferaNumberDescription(
             key=f"light_preset_{n}_brightness",
             name=f"Light preset {n} brightness",
             offset=SETTINGS_LIGHT_BRIGHTNESS + n - 1,
@@ -113,7 +113,7 @@ NUMBERS: tuple[RoroshettaNumberDescription, ...] = (
         for n in (1, 2, 3)
     ),
     *(
-        RoroshettaNumberDescription(
+        SaferaNumberDescription(
             key=f"light_preset_{n}_color",
             name=f"Light preset {n} colour",
             offset=SETTINGS_LIGHT_COLOR + n - 1,
@@ -133,17 +133,17 @@ NUMBERS: tuple[RoroshettaNumberDescription, ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: RoroshettaConfigEntry,
+    entry: SaferaConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the preset number entities."""
     async_add_entities(
-        RoroshettaPresetNumber(entry.runtime_data, description)
+        SaferaPresetNumber(entry.runtime_data, description)
         for description in NUMBERS
     )
 
 
-class RoroshettaPresetNumber(RoroshettaEntity, NumberEntity):
+class SaferaPresetNumber(SaferaEntity, NumberEntity):
     """One byte of the settings block, exposed as an adjustable number.
 
     These are the same presets the Safera app edits under Cooker Hood Settings.
@@ -151,12 +151,12 @@ class RoroshettaPresetNumber(RoroshettaEntity, NumberEntity):
     comes from a cached read refreshed once per connection and after each write.
     """
 
-    entity_description: RoroshettaNumberDescription
+    entity_description: SaferaNumberDescription
 
     def __init__(
         self,
-        coordinator: RoroshettaDataUpdateCoordinator,
-        description: RoroshettaNumberDescription,
+        coordinator: SaferaDataUpdateCoordinator,
+        description: SaferaNumberDescription,
     ) -> None:
         """Initialise the number."""
         super().__init__(coordinator, description.key)

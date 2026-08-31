@@ -9,7 +9,7 @@ Raw 69-byte payloads from the `0000beef-…` characteristic, one per line:
 The coordinator logs every frame on a dedicated logger, so frames can be collected
 without turning on debug for everything else. Call the `logger.set_level` service with:
 
-    {"custom_components.roroshetta.coordinator.frames": "debug"}
+    {"custom_components.safera.coordinator.frames": "debug"}
 
 then pull `/api/hassio/core/logs?lines=N` and grep for `coordinator.frames`.
 Frames arrive at ~1/second. The level resets on restart.

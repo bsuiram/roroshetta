@@ -1,4 +1,4 @@
-"""Light platform for Roroshetta Sense."""
+"""Light platform for Safera Sense."""
 
 from __future__ import annotations
 
@@ -23,22 +23,22 @@ from .const import (
     LIGHT_PRESET_OFF,
     LIGHT_PRESET_ON,
 )
-from .coordinator import RoroshettaConfigEntry, RoroshettaDataUpdateCoordinator
-from .entity import RoroshettaEntity
+from .coordinator import SaferaConfigEntry, SaferaDataUpdateCoordinator
+from .entity import SaferaEntity
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: RoroshettaConfigEntry,
+    entry: SaferaConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the hood light."""
-    async_add_entities([RoroshettaLight(entry.runtime_data)])
+    async_add_entities([SaferaLight(entry.runtime_data)])
 
 
-class RoroshettaLight(RoroshettaEntity, LightEntity):
+class SaferaLight(SaferaEntity, LightEntity):
     """The hood's lamp.
 
     All three channels were confirmed against the real hood on 2026-08-28, and
@@ -56,7 +56,7 @@ class RoroshettaLight(RoroshettaEntity, LightEntity):
     _attr_min_color_temp_kelvin = LIGHT_MIN_KELVIN
     _attr_max_color_temp_kelvin = LIGHT_MAX_KELVIN
 
-    def __init__(self, coordinator: RoroshettaDataUpdateCoordinator) -> None:
+    def __init__(self, coordinator: SaferaDataUpdateCoordinator) -> None:
         """Initialise the light."""
         super().__init__(coordinator, "light")
         # Brightness and colour both read 0 while the lamp is off, so the last

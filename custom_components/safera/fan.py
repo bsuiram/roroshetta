@@ -1,4 +1,4 @@
-"""Fan platform for Roroshetta Sense."""
+"""Fan platform for Safera Sense."""
 
 from __future__ import annotations
 
@@ -15,22 +15,22 @@ from homeassistant.util.percentage import (
 )
 
 from .const import CMD_MOTOR_RAW_SPEED, FAN_SPEED_RANGE
-from .coordinator import RoroshettaConfigEntry, RoroshettaDataUpdateCoordinator
-from .entity import RoroshettaEntity
+from .coordinator import SaferaConfigEntry, SaferaDataUpdateCoordinator
+from .entity import SaferaEntity
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: RoroshettaConfigEntry,
+    entry: SaferaConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the hood fan."""
-    async_add_entities([RoroshettaFan(entry.runtime_data)])
+    async_add_entities([SaferaFan(entry.runtime_data)])
 
 
-class RoroshettaFan(RoroshettaEntity, FanEntity):
+class SaferaFan(SaferaEntity, FanEntity):
     """The hood's extraction fan.
 
     ``CMD_MOTOR_RAW_SPEED`` takes 0-255 and byte 57 reports the actual motor
@@ -49,7 +49,7 @@ class RoroshettaFan(RoroshettaEntity, FanEntity):
         | FanEntityFeature.TURN_OFF
     )
 
-    def __init__(self, coordinator: RoroshettaDataUpdateCoordinator) -> None:
+    def __init__(self, coordinator: SaferaDataUpdateCoordinator) -> None:
         """Initialise the fan."""
         super().__init__(coordinator, "fan")
 

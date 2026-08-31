@@ -1,4 +1,4 @@
-"""Coordinator for Roroshetta Sense."""
+"""Coordinator for Safera Sense."""
 
 from __future__ import annotations
 
@@ -59,12 +59,12 @@ _LOGGER = logging.getLogger(__name__)
 # Raw frames on their own logger so they can be captured without turning on
 # debug for everything else:
 #   action: logger.set_level
-#   data: {"custom_components.roroshetta.coordinator.frames": "debug"}
+#   data: {"custom_components.safera.coordinator.frames": "debug"}
 # Emits one hex line per frame (~1/second), for mapping the payload offsets
 # that are still unknown. See CLAUDE.md.
 _FRAME_LOGGER = logging.getLogger(f"{__name__}.frames")
 
-type RoroshettaConfigEntry = ConfigEntry[RoroshettaDataUpdateCoordinator]
+type SaferaConfigEntry = ConfigEntry[SaferaDataUpdateCoordinator]
 
 
 # Device Information Service fields read on connect, in read order.
@@ -92,8 +92,8 @@ def format_sw_version(values: dict[str, str]) -> str | None:
 
 
 @dataclass
-class RoroshettaData:
-    """Data from Roroshetta Sense device."""
+class SaferaData:
+    """Data from Safera Sense device."""
 
     temperature: float | None = None
     heat_index: float | None = None
@@ -120,19 +120,19 @@ class RoroshettaData:
     uptime: int | None = None
 
 
-class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
-    """Class to manage fetching Roroshetta data."""
+class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
+    """Class to manage fetching Safera data."""
 
     def __init__(
         self,
         hass: HomeAssistant,
         logger: logging.Logger,
-        entry: RoroshettaConfigEntry,
+        entry: SaferaConfigEntry,
     ) -> None:
         """Initialize the coordinator."""
         address = entry.unique_id
         assert address is not None
-        _LOGGER.debug("Initializing Roroshetta coordinator for device %s", address)
+        _LOGGER.debug("Initializing Safera coordinator for device %s", address)
         super().__init__(
             hass=hass,
             logger=logger,
@@ -141,7 +141,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         )
         self.address = address
         self.entry = entry
-        self.data = RoroshettaData()
+        self.data = SaferaData()
         self._client: BleakClient | None = None
         self._paired_once = bool(entry.data.get(DATA_PAIRED_ONCE))
         self._device_info: dict[str, str] = dict(
@@ -158,7 +158,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         self._settings: bytes | None = None
         self._command_lock = asyncio.Lock()
         self._last_command: float | None = None
-        _LOGGER.debug("Roroshetta coordinator initialized successfully")
+        _LOGGER.debug("Safera coordinator initialized successfully")
 
     @property
     def device_identifier(self) -> str:
@@ -265,7 +265,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         client = self._client
         if client is None or not self._connected or not client.is_connected:
             raise HomeAssistantError(
-                "Roroshetta is not connected, so the command was not sent"
+                "Safera is not connected, so the command was not sent"
             )
         for value, name in ((code, "code"), (param, "parameter")):
             if not 0 <= value <= 0xFFFFFFFF:
@@ -325,7 +325,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         """Read the whole configuration block and cache it."""
         client = self._client
         if client is None or not self._connected or not client.is_connected:
-            raise HomeAssistantError("Roroshetta is not connected")
+            raise HomeAssistantError("Safera is not connected")
         target = self._settings_read_char
         if target is None:
             target = self._settings_read_char = self._resolve_char(
@@ -359,7 +359,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         client = self._client
         if client is None or not self._connected or not client.is_connected:
             raise HomeAssistantError(
-                "Roroshetta is not connected, so the setting was not written"
+                "Safera is not connected, so the setting was not written"
             )
         if not 0 <= offset < SETTINGS_LENGTH:
             raise HomeAssistantError(
@@ -418,7 +418,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         if self._connected == connected:
             return
         self._connected = connected
-        _LOGGER.debug("Roroshetta connection state: %s", connected)
+        _LOGGER.debug("Safera connection state: %s", connected)
         self.async_update_listeners()
 
     async def async_start_notify(self) -> None:
@@ -467,7 +467,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
             )
             if not available_device:
                 _LOGGER.debug(
-                    "Roroshetta device at %s is not available in the Bluetooth cache",
+                    "Safera device at %s is not available in the Bluetooth cache",
                     address,
                 )
                 if await self._sleep_or_stop(DEVICE_WAIT_SECONDS):
@@ -489,7 +489,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
 
             try:
                 _LOGGER.debug(
-                    "Connecting to Roroshetta device at %s (attempt %d)",
+                    "Connecting to Safera device at %s (attempt %d)",
                     address,
                     attempt + 1,
                 )
@@ -497,7 +497,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
                 def on_disconnect(_client: BleakClient) -> None:
                     """Wake the loop so it reconnects."""
                     _LOGGER.debug(
-                        "Roroshetta device at %s disconnected", address
+                        "Safera device at %s disconnected", address
                     )
                     self.hass.loop.call_soon_threadsafe(disconnect_event.set)
 
@@ -521,7 +521,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
 
                 self._client = client
 
-                _LOGGER.debug("Connected to Roroshetta device at %s", address)
+                _LOGGER.debug("Connected to Safera device at %s", address)
 
                 await self._async_read_device_info(client)
                 self._command_char = self._resolve_char(
@@ -539,7 +539,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
                 def handle_notify(sender, data):
                     """Handle notification from device."""
                     _LOGGER.debug(
-                        "Received notification from Roroshetta device: %s bytes",
+                        "Received notification from Safera device: %s bytes",
                         len(data),
                     )
                     self._last_notification = self.hass.loop.time()
@@ -598,7 +598,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
                     error_type = "Connection timeout"
 
                 _LOGGER.warning(
-                    "%s for Roroshetta device at %s (attempt %d): %s",
+                    "%s for Safera device at %s (attempt %d): %s",
                     error_type,
                     address,
                     attempt + 1,
@@ -606,7 +606,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
                 )
             except Exception as err:
                 _LOGGER.error(
-                    "Unexpected error streaming notifications for Roroshetta device at %s (attempt %d): %s",
+                    "Unexpected error streaming notifications for Safera device at %s (attempt %d): %s",
                     address,
                     attempt + 1,
                     err,
@@ -637,7 +637,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
 
             wait_time = min(MAX_BACKOFF_SECONDS, 2**attempt)
             _LOGGER.debug(
-                "Reconnecting to Roroshetta device at %s in %d seconds",
+                "Reconnecting to Safera device at %s in %d seconds",
                 address,
                 wait_time,
             )
@@ -678,7 +678,7 @@ class RoroshettaDataUpdateCoordinator(DataUpdateCoordinator[RoroshettaData]):
         self.data.grease_filter = get_u16_le(59, 1)
 
         _LOGGER.debug(
-            "Parsed Roroshetta data: temperature=%.2f°C, humidity=%.1f%%, CO2=%d ppm, TVOC=%d µg/m³, PM2.5=%.2f µg/m³, uptime=%d s",
+            "Parsed Safera data: temperature=%.2f°C, humidity=%.1f%%, CO2=%d ppm, TVOC=%d µg/m³, PM2.5=%.2f µg/m³, uptime=%d s",
             self.data.temperature,
             self.data.humidity,
             self.data.co2,

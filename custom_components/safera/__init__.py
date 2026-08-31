@@ -1,4 +1,4 @@
-"""The Roroshetta Sense integration."""
+"""The Safera Sense integration."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, SERVICE_SEND_COMMAND, SERVICE_WRITE_SETTING
-from .coordinator import RoroshettaConfigEntry, RoroshettaDataUpdateCoordinator
+from .coordinator import SaferaConfigEntry, SaferaDataUpdateCoordinator
 
 PLATFORMS = [
     Platform.BUTTON,
@@ -64,13 +64,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     def _resolve_coordinator(
         hass: HomeAssistant, call: ServiceCall
-    ) -> RoroshettaDataUpdateCoordinator:
+    ) -> SaferaDataUpdateCoordinator:
         """Pick the coordinator a service call is aimed at."""
         entries = [
             entry
             for entry in hass.config_entries.async_loaded_entries(DOMAIN)
             if isinstance(
-                getattr(entry, "runtime_data", None), RoroshettaDataUpdateCoordinator
+                getattr(entry, "runtime_data", None), SaferaDataUpdateCoordinator
             )
         ]
         if device_id := call.data.get(ATTR_DEVICE_ID):
@@ -79,10 +79,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 raise HomeAssistantError(f"Unknown device_id {device_id}")
             entries = [e for e in entries if e.entry_id in device.config_entries]
         if not entries:
-            raise HomeAssistantError("No loaded Roroshetta device to send to")
+            raise HomeAssistantError("No loaded Safera device to send to")
         if len(entries) > 1:
             raise HomeAssistantError(
-                "Several Roroshetta devices are set up; pass device_id to pick one"
+                "Several Safera devices are set up; pass device_id to pick one"
             )
         return entries[0].runtime_data
 
@@ -129,21 +129,21 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: RoroshettaConfigEntry) -> bool:
-    """Set up Roroshetta Sense from a config entry."""
-    _LOGGER.debug("Setting up Roroshetta entry: %s", entry.entry_id)
+async def async_setup_entry(hass: HomeAssistant, entry: SaferaConfigEntry) -> bool:
+    """Set up Safera Sense from a config entry."""
+    _LOGGER.debug("Setting up Safera entry: %s", entry.entry_id)
     address = entry.unique_id
     assert address is not None
-    _LOGGER.debug("Roroshetta device address: %s", address)
+    _LOGGER.debug("Safera device address: %s", address)
 
     # Deliberately no availability check here. Right after a restart the
     # bluetooth cache is often still cold, and failing setup on that produced a
     # spurious error every boot. The notify loop waits for the device instead.
-    coordinator = RoroshettaDataUpdateCoordinator(hass, _LOGGER, entry)
+    coordinator = SaferaDataUpdateCoordinator(hass, _LOGGER, entry)
     entry.runtime_data = coordinator
 
     await coordinator.async_start_notify()
-    _LOGGER.debug("Started Roroshetta coordinator")
+    _LOGGER.debug("Started Safera coordinator")
 
     async def _async_stop_on_shutdown(_event: Event) -> None:
         """Drop the BLE link when HA shuts down.
@@ -166,8 +166,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: RoroshettaConfigEntry) -
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: RoroshettaConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: SaferaConfigEntry) -> bool:
     """Unload a config entry."""
-    _LOGGER.debug("Unloading Roroshetta entry: %s", entry.entry_id)
+    _LOGGER.debug("Unloading Safera entry: %s", entry.entry_id)
     await entry.runtime_data.async_stop()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

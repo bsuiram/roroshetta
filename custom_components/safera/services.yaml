@@ -31,7 +31,7 @@ send_command:
       required: false
       selector:
         device:
-          integration: roroshetta
+          integration: safera
 
 write_setting:
   name: Write setting
@@ -62,4 +62,4 @@ write_setting:
       required: false
       selector:
         device:
-          integration: roroshetta
+          integration: safera

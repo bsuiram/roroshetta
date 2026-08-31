@@ -1,6 +1,6 @@
 {
-  "domain": "roroshetta",
-  "name": "Roroshetta Sense",
+  "domain": "safera",
+  "name": "Safera Sense",
   "version": "1.0.0",
   "bluetooth": [
     {
@@ -8,6 +8,10 @@
     },
     {
       "local_name": "Roroshetta Sense",
+      "connectable": true
+    },
+    {
+      "local_name": "Safera Sense",
       "connectable": true
     },
     {
@@ -19,10 +23,14 @@
       "connectable": true
     }
   ],
-  "codeowners": ["@me"],
+  "codeowners": [
+    "@me"
+  ],
   "config_flow": true,
-  "dependencies": ["bluetooth_adapters"],
-  "documentation": "https://www.home-assistant.io/integrations/roroshetta",
+  "dependencies": [
+    "bluetooth_adapters"
+  ],
+  "documentation": "https://github.com/bsuiram/roroshetta",
   "integration_type": "device",
   "iot_class": "local_push",
   "quality_scale": "bronze",

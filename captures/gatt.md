@@ -16,7 +16,7 @@ household WiFi SSID and the device's own `Sense_xxxxxx` id. This repo is public.
 
 | handle | UUID | props | value |
 |---|---|---|---|
-| 3 | `2a00` Device Name | read | `Roroshetta Sense` |
+| 3 | `2a00` Device Name | read | `Safera Sense` |
 | 5 | `2a01` Appearance | read | `0000` |
 | 7 | `2a04` Preferred Conn Params | read | `0600 2800 0000 5802` |
 | 9 | `2aa6` Central Addr Resolution | read | `01` |

@@ -1,23 +1,23 @@
-# Roroshetta Sense Custom Component
+# Safera Sense Custom Component
 
-A custom Home Assistant integration for the Roroshetta Sense Bluetooth environmental sensor.
+A custom Home Assistant integration for the Safera Sense Bluetooth environmental sensor.
 
 ## Features
 
-- **Automatic Bluetooth Discovery**: Discovers Roroshetta Sense devices via Bluetooth advertising
+- **Automatic Bluetooth Discovery**: Discovers Safera Sense devices via Bluetooth advertising
 - **Environmental Monitoring**: Monitors temperature, humidity, CO2, TVOC, PM2.5, and more
 - **Real-time Updates**: Holds a BLE connection open and receives pushed notifications (~1/second)
 - **Comprehensive Debug Logging**: Extensive debug logging for troubleshooting
 
 ## Installation
 
-1. Copy the `custom_components/roroshetta/` directory to your Home Assistant `custom_components` folder
+1. Copy the `custom_components/safera/` directory to your Home Assistant `custom_components` folder
 2. Restart Home Assistant
-3. The integration will automatically discover your Roroshetta Sense device
+3. The integration will automatically discover your Safera Sense device
 
 ## Configuration
 
-The integration is configured automatically through Bluetooth discovery. When your Roroshetta Sense device is detected, you'll see a notification in Home Assistant to set it up.
+The integration is configured automatically through Bluetooth discovery. When your Safera Sense device is detected, you'll see a notification in Home Assistant to set it up.
 
 Setup asks you to put the device into pairing mode. Note there is roughly a 10 second gap between
 submitting that step and the actual pairing attempt, so stay at the hood until it completes. Once
@@ -70,25 +70,25 @@ As well as the sensors above, the integration exposes:
   the hood's own settings block, re-read once per connection and after every write, so they are not
   guesses. Colour is in Kelvin, 2700-4995 K in 9 K steps.
 
-### `roroshetta.send_command`
+### `safera.send_command`
 
 A raw escape hatch for reverse-engineering: writes an arbitrary command code and parameter to the
 hood's command characteristic. Known codes are in `const.py` and `captures/gatt.md`. Deliberately
 raw, since the command set is still being mapped — the light, fan and filter commands were all
 found this way.
 
-    action: roroshetta.send_command
+    action: safera.send_command
     data:
       code: "0x2005"
       param: 1
 
-### `roroshetta.write_setting`
+### `safera.write_setting`
 
 Writes one byte of the hood's 200-byte configuration block and reads it back to confirm. The preset
 offsets are mapped (see `captures/gatt.md`) but most of the block is not, and it also holds
 stove-guard configuration — so this is deliberately low level.
 
-    action: roroshetta.write_setting
+    action: safera.write_setting
     data:
       offset: 87
       value: 22
@@ -99,7 +99,7 @@ The integration includes comprehensive debug logging. To enable debug logging:
 
 1. Go to **Settings** > **System** > **Logs**
 2. Set log level to `debug` for the following loggers:
-   - `custom_components.roroshetta`
+   - `custom_components.safera`
    - `homeassistant.components.bluetooth`
 
 Or add this to your `configuration.yaml`:
@@ -108,7 +108,7 @@ Or add this to your `configuration.yaml`:
 logger:
   default: info
   logs:
-    custom_components.roroshetta: debug
+    custom_components.safera: debug
     homeassistant.components.bluetooth: debug
 ```
 
@@ -116,7 +116,7 @@ logger:
 
 ### Device Not Discovered
 
-1. Ensure your Roroshetta Sense device is powered on and in Bluetooth range
+1. Ensure your Safera Sense device is powered on and in Bluetooth range
 2. Check Bluetooth proxy logs for device advertising data
 3. Verify the device is advertising with the expected service UUID: `0000f00d-1212-efde-1523-785fef13d123`
 
@@ -129,7 +129,7 @@ logger:
    - Restarting the ESPHome device
    - Moving the device closer to the Bluetooth proxy
    - Checking ESPHome device logs for Bluetooth issues
-   - Ensuring no other devices are connected to the Roroshetta Sense
+   - Ensuring no other devices are connected to the Safera Sense
    - **Pairing issues**: If the device requires pairing, ensure it's not already paired with another device. The integration attempts automatic pairing on connection.
 
 ### Data Not Updating
@@ -152,16 +152,16 @@ logger:
 
 ## Device Compatibility
 
-The Roroshetta Sense may require Bluetooth pairing before it allows connections. The integration automatically attempts pairing during connection establishment. If you encounter persistent connection failures:
+The Safera Sense may require Bluetooth pairing before it allows connections. The integration automatically attempts pairing during connection establishment. If you encounter persistent connection failures:
 
-1. **Check device pairing status**: Ensure the Roroshetta Sense is not already paired with another device
+1. **Check device pairing status**: Ensure the Safera Sense is not already paired with another device
 2. **Reset device pairing**: Some devices may need to be reset to factory settings to clear existing pairings
-3. **Device firmware**: Ensure your Roroshetta Sense has firmware that supports the expected Bluetooth characteristics
+3. **Device firmware**: Ensure your Safera Sense has firmware that supports the expected Bluetooth characteristics
 4. **Bluetooth range**: Keep the device within Bluetooth range of your ESPHome proxy
 
 ## Requirements
 
 - Home Assistant 2024.1+
 - Bluetooth adapter with BLE support
-- Roroshetta Sense device firmware that supports the expected characteristics
+- Safera Sense device firmware that supports the expected characteristics
 - **Device must be pairable**: The device should allow Bluetooth pairing for connection establishment

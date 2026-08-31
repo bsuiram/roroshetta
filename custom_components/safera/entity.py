@@ -1,4 +1,4 @@
-"""Shared entity base for the controllable Roroshetta platforms."""
+"""Shared entity base for the controllable Safera platforms."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import RoroshettaDataUpdateCoordinator, format_sw_version
+from .coordinator import SaferaDataUpdateCoordinator, format_sw_version
 
 
-class RoroshettaEntity(CoordinatorEntity[RoroshettaDataUpdateCoordinator]):
+class SaferaEntity(CoordinatorEntity[SaferaDataUpdateCoordinator]):
     """Common device wiring for light, fan and button entities.
 
     ``sensor.py`` deliberately does not use this: its entities predate it and
@@ -20,7 +20,7 @@ class RoroshettaEntity(CoordinatorEntity[RoroshettaDataUpdateCoordinator]):
     _attr_has_entity_name = True
 
     def __init__(
-        self, coordinator: RoroshettaDataUpdateCoordinator, key: str
+        self, coordinator: SaferaDataUpdateCoordinator, key: str
     ) -> None:
         """Initialise shared identity and device info."""
         super().__init__(coordinator)
@@ -30,7 +30,7 @@ class RoroshettaEntity(CoordinatorEntity[RoroshettaDataUpdateCoordinator]):
         info = coordinator.device_info_values
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, str(address))},
-            name="Roroshetta Sense",
+            name="Safera Sense",
             manufacturer=info.get("manufacturer", "Safera Oy"),
             model=info.get("model", "Sense"),
             serial_number=info.get("serial_number"),

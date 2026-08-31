@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A single custom Home Assistant integration (`custom_components/roroshetta/`) that reads environmental
+A single custom Home Assistant integration (`custom_components/safera/`) that reads environmental
 sensors from a Safera / Røroshetta Sense kitchen hood over BLE. There is no build system, no test
 suite, no linter config, and no `requirements` in the manifest — it is plain Python deployed by
-copying `custom_components/roroshetta/` into a Home Assistant config directory and restarting HA.
+copying `custom_components/safera/` into a Home Assistant config directory and restarting HA.
 
 Status: working. The integration streams all 14 sensors at ~1 Hz against a real hood. The top-level
 README still says "does not work" — it predates the fix. Note the component README also describes a
@@ -20,7 +20,7 @@ There is no unit test harness and no CI. Four ways to exercise the code, cheapes
 - **Stub-import the coordinator** — no hardware, no Home Assistant. See "Verifying a change without
   hardware" below. Catches control-flow regressions in seconds; proves nothing about byte offsets.
 - **`python test.py`** — standalone bleak script, run from a machine with a BLE adapter near the
-  hood. Scans for `Roroshetta Sense`, subscribes to `0000BEEF-…` and prints decoded frames. Reference
+  hood. Scans for `Safera Sense`, subscribes to `0000BEEF-…` and prints decoded frames. Reference
   implementation of the decoding (flip `print_bit` / `print_all` in `decode_env1` to probe bytes).
   Note it will fight the integration for the hood's single connection slot — stop one or the other.
 - **Deploy to Home Assistant and read the log.** The details below are what make this bearable.
@@ -30,7 +30,7 @@ There is no unit test harness and no CI. Four ways to exercise the code, cheapes
 
 ### Deploying
 
-Copy `custom_components/roroshetta/` into the HA config directory and **restart Home Assistant**.
+Copy `custom_components/safera/` into the HA config directory and **restart Home Assistant**.
 Reloading the config entry is *not* enough — Python does not re-import a changed module, so a reload
 silently runs the old code. Every code change needs a full restart; only config-entry state changes
 can be tested with a reload.
@@ -40,10 +40,10 @@ can be tested with a reload.
 - `/api/error_log` was **removed** in recent HA versions (returns 404). Use the Supervisor proxy:
   `GET /api/hassio/core/logs?lines=N`, which returns the raw core log including DEBUG lines.
 - Turn on debug at runtime with the **`logger.set_level`** service — no YAML edit, no restart:
-  `{"custom_components.roroshetta": "debug"}`. It resets on every restart, so re-apply it after one.
-- Keep `custom_components.roroshetta.sensor` at `info`. HA reads entity properties constantly and
+  `{"custom_components.safera": "debug"}`. It resets on every restart, so re-apply it after one.
+- Keep `custom_components.safera.sensor` at `info`. HA reads entity properties constantly and
   debug there is pure noise.
-- Raw frames have their own logger, `custom_components.roroshetta.coordinator.frames`, so payloads
+- Raw frames have their own logger, `custom_components.safera.coordinator.frames`, so payloads
   can be captured without enabling debug for everything else. See `captures/`.
 
 ### Is it the code or the transport?
@@ -66,6 +66,10 @@ problems, not bugs. Before debugging the code, rule that out:
 Flow: BLE advertisement → config flow → coordinator holds a persistent connection → notifications
 push data → sensor entities read from `coordinator.data`.
 
+- **The hood advertises as `Roroshetta Sense`, not `Safera Sense`.** Røroshetta units are rebadged
+  Safera hoods — this one reports manufacturer Safera Oy, model IFU10CR-PRO — so the integration is
+  named for the manufacturer but **must keep matching the Roroshetta local name**, or discovery
+  breaks entirely. `ADVERTISED_NAMES` in `const.py` and the `manifest.json` matchers list both.
 - **Discovery is passive, data collection is not.** `manifest.json` declares several bluetooth
   matchers (service UUID `0000f00d-…`, local name, manufacturer id 1837). HA only uses these to
   trigger the config flow; the actual values come from a *connected* GATT notify subscription on
@@ -83,8 +87,8 @@ push data → sensor entities read from `coordinator.data`.
   additionally sleeps `PAIRING_WINDOW_SECONDS` before the first connect and calls `client.pair()` once;
   only after `start_notify` succeeds does it persist `DATA_PAIRED_ONCE` into the config entry data, so
   later restarts skip both the delay and the pair call. Preserve this flag when writing entry data.
-- **`entry.runtime_data` is the coordinator** (typed via `type RoroshettaConfigEntry =
-  ConfigEntry[RoroshettaDataUpdateCoordinator]` in `coordinator.py`) — no `hass.data[DOMAIN]`.
+- **`entry.runtime_data` is the coordinator** (typed via `type SaferaConfigEntry =
+  ConfigEntry[SaferaDataUpdateCoordinator]` in `coordinator.py`) — no `hass.data[DOMAIN]`.
 - **The BLE link is held open permanently, by design.** The hood almost certainly accepts one
   central at a time, so while HA is running the Safera phone app cannot connect. This was considered
   and accepted (2026-08-27): the app was only ever a debugging tool, and log/data access through HA
@@ -97,11 +101,11 @@ push data → sensor entities read from `coordinator.data`.
   transition so entities re-render the instant a link drops. Caveat: staleness alone does not
   self-trigger a re-render — only connect/disconnect pushes do.
 - **Four platforms: `button`, `fan`, `light`, `sensor`.** The three control platforms share
-  `entity.py`'s `RoroshettaEntity` for device wiring and availability. `sensor.py` deliberately does
+  `entity.py`'s `SaferaEntity` for device wiring and availability. `sensor.py` deliberately does
   **not** use it — its entities predate the base and switching them over risks changing unique ids
   or names, which would orphan history. New platforms should use it.
-- **`sensor.py` is table-driven.** Each sensor is a `RoroshettaSensorEntityDescription` with a
-  `value_fn(coordinator)`; adding a sensor means adding a field to the `RoroshettaData` dataclass,
+- **`sensor.py` is table-driven.** Each sensor is a `SaferaSensorEntityDescription` with a
+  `value_fn(coordinator)`; adding a sensor means adding a field to the `SaferaData` dataclass,
   a decode line in `_parse_data`, and one entry in the `SENSORS` tuple.
 
 ## The BLE payload
@@ -116,7 +120,7 @@ or offset in one, change it in the other, and validate against a live device bef
 mapping.
 
 To capture frames, switch on the dedicated frame logger
-(`custom_components.roroshetta.coordinator.frames` → `debug` via the `logger.set_level` service)
+(`custom_components.safera.coordinator.frames` → `debug` via the `logger.set_level` service)
 and grep the core log for `coordinator.frames`. See `captures/` for tooling, stored captures, and a
 per-byte analyser that labels each offset with the field currently read from it.
 
@@ -314,7 +318,7 @@ every time.
 `coordinator.async_send_command(code, param)` is the only write path. It resolves the characteristic
 object once per connection (`_resolve_command_char`), serialises writes behind a lock, spaces them
 by `COMMAND_MIN_INTERVAL_SECONDS`, and raises `HomeAssistantError` rather than failing quietly. The
-`roroshetta.send_command` service exposes it raw for experimentation — that is deliberate while the
+`safera.send_command` service exposes it raw for experimentation — that is deliberate while the
 command set is still being mapped, and it is how everything above was discovered without a redeploy
 per attempt.
 
