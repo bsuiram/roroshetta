@@ -142,6 +142,29 @@ it reached 107 after the cut. `@33` is the state: **2 normal, 7 pre-alarm, 8 coo
 normal, 0 while alarming), and `power @46-47` dropping to 0 on the cut. Event log codes **103** and
 **104** landed on the same seconds as the 7 and 8 transitions.
 
+### Preset values as configured on this hood
+
+Recorded 2026-08-31 so there is a reference to restore from. **These are observed values, not
+verified factory defaults** — the hood had been in use before any of this started, so an earlier
+owner setting is indistinguishable from a shipped one.
+
+| | raw bytes | as the app shows them |
+|---|---|---|
+| Motor 1 `@86-91` | 0, 22, 43, 81, 127, 254 | 0%, 9%, 17%, 32%, 50%, 100% |
+| Motor 2 `@93-98` | 13, 13, 40, 80, 127, 254 | 5%, 5%, 16%, 31%, 50%, 100% |
+| Light brightness `@103-105` | 20, 50, 255 | 8%, 20%, 100% |
+| Light colour `@107-109` | 10, 30, 27 | 2790 K, 2970 K, 2943 K |
+| Ventilation sensitivity `@133` | 50 | 50% (the app calls 50 the default) |
+| Sensor height `@41` | 70 | 70 cm |
+| Cooker width `@42` | 90 | 90 cm |
+
+Motor 1 is the only table known to have changed during this work: it read 0, 23, 26, 36, 82, 254 —
+0%, 9%, 10%, 14%, 32%, 100% — when first captured on 2026-08-28, and was edited in the app to the
+values above. Both are recorded because neither can be shown to be the factory set.
+
+Motor 2 is the external blower and is not fitted on this hood, so its table has never driven
+anything; it is presumably untouched from the factory.
+
 ### Mounting geometry
 
 Changing the sensor height from 70 to 54 cm and the cooker width from 90 to 100 cm in the app moved

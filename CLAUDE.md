@@ -349,6 +349,10 @@ Ventilation sensitivity was pinned down the same way: setting it to 48 in the ap
 one byte in the whole block, `@133`. Three other offsets also happened to read 50 and were ruled out
 by the same diff — a reminder that matching a value is a hypothesis, and only a change is evidence.
 
+The preset values as configured on this hood are recorded in `captures/gatt.md` so there is
+something to restore from. They are **observed values, not verified factory defaults** — the hood
+was in use before any of this began.
+
 `coordinator.async_read_settings()` caches the block, refreshed **once per connection and after
 every write** — nothing else changes it, so an edit made in the app appears on the next reconnect.
 `async_write_setting()` writes one byte and reads it back, returning what actually landed so a
