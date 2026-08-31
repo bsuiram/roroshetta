@@ -193,8 +193,11 @@ offsets do not survive contact with our frames, so **prefer the measured values 
 - ~~its particle index at `@12-13 / 5`~~ **it was right and we were wrong.** A 2026-08-31 app
   screenshot shows PM2.5 = **0** while our `@13 / 1000` read 2.56. Byte 13 is zero in all 12604
   frames ever captured, so that decode really computed `byte14 × 0.256` and invented three decimals.
-  `pm25` is now `@12-13 / 5`. Note only the *offset* is confirmed: `@12-13` has never been anything
-  but zero, so the `/5` scaling is still untested;
+  `pm25` is now `@12-13 / 5`, and a cooking session on 2026-08-31 validated the scaling too: it
+  peaked at **40.4 µg/m³** while frying and settled back to 1-3, which are sensible magnitudes.
+  Incidentally `aqi` at `@10-11` tracks the same quantity one update behind — the raw particle
+  sequence 100, 80, 78, 162, 128, 202 reappears as AQI one sample later — so the index is derived
+  from the particle reading with a lag;
 - its heat index at `@24 × 2` gives 48 °C, which is not credible.
 
 Everything else it lists agrees, including several of our constant bytes: `@26` battery (100),
@@ -233,10 +236,10 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
 so our declaration is right and the external table is wrong on this firmware. Confirmed 2026-08-31,
 after being marked unconfirmed since the beginning.
 
-**Air quality readings can freeze.** On 2026-08-31 AQI, tVOC, CO₂ and byte 14 each held exactly one
-value across 3455 frames and 2.5 hours (3, 16, 427, 10), where tVOC alone took 303 distinct values
-on 08-28. The app showed the same frozen numbers and the sensor-error bitmask at `@34-35` read 0, so
-it is the device rather than the decode — but do not mistake a frozen sensor for stable air.
+**Air quality can look frozen when the air is simply clean.** On 2026-08-31 AQI, tVOC, CO₂ and byte
+14 each held one value for 2.5 hours (3, 16, 427, 10), which looked like a stalled sensor. A cooking
+session that afternoon moved all of them hard — AQI 3 → 202, tVOC 16 → 2417, PM2.5 0 → 40.4 — so
+nothing was wrong. Judge a sensor stuck only after something that should move it does not.
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via

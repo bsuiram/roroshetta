@@ -34,8 +34,8 @@ The integration provides the following sensors:
 - **Humidity**: Relative humidity in %
 - **CO2**: Carbon dioxide concentration in ppm
 - **TVOC**: Total Volatile Organic Compounds in µg/m³ — unit confirmed against the app 2026-08-31
-- **PM2.5**: Particulate matter 2.5 in µg/m³. Has read 0 in every frame ever captured, matching
-  the app, so the offset is confirmed but the scaling is not
+- **PM2.5**: Particulate matter 2.5 in µg/m³. Confirmed against the app at 0, and against a frying
+  session that took it to 40.4
 - **AQI**: Air Quality Index
 - **Power**: Power drawn by the cooktop, in W (0 when the hob is off; observed up to 2660 W)
 - **Uptime**: Device uptime in seconds
