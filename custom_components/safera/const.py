@@ -59,6 +59,10 @@ SETTINGS_VENT_SENSITIVITY = 133  # percent, stored directly with no scaling
 SETTINGS_SENSOR_HEIGHT = 41  # cm, mirrored live at payload @8
 SETTINGS_COOKER_WIDTH = 42  # cm
 
+# The app offers cooker width as a fixed list, not free entry: 50 to 100 cm in
+# 10 cm steps.
+COOKER_WIDTHS = (50, 60, 70, 80, 90, 100)
+
 # Ventilation presets are stored as a fraction of 254; light brightness of 255.
 FAN_PRESET_MAX = 254
 LIGHT_PRESET_BRIGHTNESS_MAX = 255

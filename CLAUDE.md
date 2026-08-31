@@ -213,6 +213,11 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
 - Bytes 24-35 are near-constant in normal running, but **`@28` and `@33` are the alarm state
   machine** and both move on a trip — do not assume a constant byte is dead, which this whole file
   is a monument to. Byte 9 and byte 52 vary slightly and are unexplained.
+- **Byte 53 carries the light preset in two encodings.** The hood and its auto logic write
+  `preset × 30` — 90 for preset 3, matching the fan's byte 56 — while `CMD_LIGHT_PRESET` writes its
+  parameter literally, leaving 1 or 2 there after one of our own commands. No single divisor serves
+  both, so `_parse_data` normalises: divide by 30 above 30, take the value literally below it. That
+  is a normalisation, not a decode, and it is commented as such.
 - **The light's intermediate steps have never been observed from the hood's own controls** — set
   that way, `@53` has only ever read 0 or 90. BLE presets put 1 and 2 there instead, which does not
   fit the `/30` scaling at all; see "Controlling the hood". The fan's steps *have* now been seen:

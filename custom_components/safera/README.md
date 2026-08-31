@@ -38,9 +38,10 @@ The integration provides the following sensors:
 - **AQI**: Air Quality Index
 - **Power**: Power drawn by the cooktop, in W (0 when the hob is off; observed up to 2660 W)
 - **Uptime**: Device uptime in seconds
-- **Light Level**: The hood's own lamp, not ambient light. Raw byte / 30; only 0 and 3.0 have
-  ever been observed, so intermediate brightness steps are unconfirmed
-- **Fan Speed**: Raw byte / 30. Observed 0 through 4.0
+- **Light brightness** and **Fan speed**: the actual live values as percentages, from bytes 54 and
+  57 — what the lamp and motor are really doing
+- **Light colour temperature**: from byte 55, as `2700 + byte * 9` Kelvin. Reports unknown while the
+  lamp is off, since all three light bytes zero out then and 2700 K would be a lie
 - **Grease Filter**: Filter saturation in percent — a slow counter, climbs about 1 per 15 h
 - **Activity Level**: Presence at the hob — spikes when someone is there, then decays steadily to 0
 - **Alarm Level**: Stove-guard hazard integrator, in percent. Rises while the hob draws power, is
@@ -55,7 +56,10 @@ The integration provides the following sensors:
 Filed under the device page's Diagnostic section rather than with the environment sensors, and kept
 off the auto-generated dashboard — visible and usable, just shelved as information about the device.
 
-- **Pitch** and **Roll** — auto-detected mounting angles in degrees, signed. These are live
+- **Light preset level** and **Fan preset level** — which of the hood's own presets is active,
+  rather than an actual output value
+- **Uptime**
+- **Sensor pitch** and **Sensor roll** — auto-detected mounting angles in degrees, signed. These are live
   accelerometer readings and drift by a degree frame to frame. Pitch moved 10° between 2026-08-28
   and 08-31 without anyone noticing, so they are worth a glance if alignment ever matters
 
@@ -83,9 +87,8 @@ As well as the sensors above, the integration exposes:
   mode**, whether it comes from Home Assistant, the Safera app or the hood's own controls, so
   switching the light on here stops it auto-starting next time until you turn the switch back on.
 
-- **Sensor height** and **Cooker width** (cm) — the hood's mounting geometry. Editable, since they
-  are configuration rather than measurements; the height is mirrored live in the payload too
-- **Ventilation sensitivity**, **Fan presets 1-4 and Boost**, **Light preset 1-3 brightness** and
+- **Cooker width** (`select.*`) — 50 to 100 cm in 10 cm steps, the fixed list the app offers
+- **Ventilation sensitivity**, **Sensor height**, **Fan presets 1-4 and Boost**, **Light preset 1-3 brightness** and
   **Light preset 1-3 colour** (`number.*`) — the same presets the Safera app edits under Cooker Hood Settings. Values come from
   the hood's own settings block, re-read once per connection and after every write, so they are not
   guesses. Colour is in Kelvin, 2700-4995 K in 9 K steps.

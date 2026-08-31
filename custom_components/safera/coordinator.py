@@ -820,7 +820,14 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
         self.data.alarm_level = get_u16_le(44, 1)
         self.data.activity = get_u16_le(45, 1)
         self.data.power = get_u16_le(46, 2)
-        self.data.light = get_u16_le(53, 1) / 30
+        # Byte 53 carries the light preset in two different encodings. The hood
+        # and its auto logic write preset * 30 (90 for preset 3, matching the
+        # fan's byte 56), while CMD_LIGHT_PRESET writes the parameter literally,
+        # so our own commands leave 1 or 2 there. Normalise both to the preset
+        # number the app shows rather than pick a divisor that is wrong half the
+        # time.
+        light_raw = get_u16_le(53, 1)
+        self.data.light = light_raw // 30 if light_raw >= 30 else light_raw
         self.data.fan = get_u16_le(56, 1) / 30
         self.data.light_raw = get_u16_le(53, 1)
         self.data.light_brightness = get_u16_le(54, 1)

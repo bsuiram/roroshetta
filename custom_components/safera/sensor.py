@@ -30,7 +30,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
-from .const import DEVICE_STATES, DOMAIN
+from .const import DEVICE_STATES, DOMAIN, LIGHT_KELVIN_BASE, LIGHT_KELVIN_PER_STEP
 from .coordinator import (
     SaferaConfigEntry,
     SaferaDataUpdateCoordinator,
@@ -112,13 +112,15 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
     ),
     SaferaSensorEntityDescription(
         key="light",
-        name="Light Level",
+        name="Light preset level",
+        entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.light,
     ),
     SaferaSensorEntityDescription(
         key="fan",
-        name="Fan Level",
+        name="Fan preset level",
+        entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.fan,
     ),
@@ -144,8 +146,44 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
         value_fn=lambda coordinator: coordinator.data.power,
     ),
     SaferaSensorEntityDescription(
+        key="light_brightness",
+        name="Light brightness",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda coordinator: (
+            None
+            if coordinator.data.light_brightness is None
+            else round(coordinator.data.light_brightness * 100 / 255)
+        ),
+    ),
+    SaferaSensorEntityDescription(
+        key="light_color_temp",
+        name="Light colour temperature",
+        # Deliberately no device class: SensorDeviceClass.TEMPERATURE would let
+        # Home Assistant convert this into the user's preferred temperature
+        # unit, turning a colour temperature into degrees Celsius.
+        native_unit_of_measurement=UnitOfTemperature.KELVIN,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda coordinator: (
+            None
+            if not coordinator.data.light_raw or coordinator.data.light_color is None
+            else LIGHT_KELVIN_BASE + coordinator.data.light_color * LIGHT_KELVIN_PER_STEP
+        ),
+    ),
+    SaferaSensorEntityDescription(
+        key="fan_speed",
+        name="Fan speed",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda coordinator: (
+            None
+            if coordinator.data.fan_speed is None
+            else round(coordinator.data.fan_speed * 100 / 255)
+        ),
+    ),
+    SaferaSensorEntityDescription(
         key="pitch",
-        name="Pitch",
+        name="Sensor pitch",
         native_unit_of_measurement=DEGREE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -153,7 +191,7 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
     ),
     SaferaSensorEntityDescription(
         key="roll",
-        name="Roll",
+        name="Sensor roll",
         native_unit_of_measurement=DEGREE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -177,6 +215,7 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
     SaferaSensorEntityDescription(
         key="uptime",
         name="Uptime",
+        entity_category=EntityCategory.DIAGNOSTIC,
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.SECONDS,
         state_class=SensorStateClass.TOTAL_INCREASING,
