@@ -216,6 +216,14 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
   live accelerometer readings: `@29` jitters across 181-183 frame to frame, and it shifted from
   ~172 (−84°) on 2026-08-27/28 to ~182 (−74°) by 08-31, so the mounting is not fixed and a knock
   would show up here.
+- **`@58` is the Motor 2 speed**, the counterpart to `@57`'s Motor 1. During a 2026-08-31 session
+  the fan walked all five levels and `@57` reproduced the Motor 1 preset table (`dcba @86-91`) while
+  `@58` reproduced the Motor 2 table (`@93-98`) exactly, including values edited in the app. That
+  also re-proves the preset tables drive the hardware.
+- **`@24` is a scaled restatement of hob heat**, about 6 counts per °C, correlating +0.99 with
+  surface temperature. Whether it is absolute surface temperature or surface-above-ambient cannot be
+  separated yet — ambient moved only 1 °C across the session, so both fits are equally good. It is
+  **not** the external table's "heat index × 2", which would put it at 22-152 °C.
 - Bytes 24-35 are near-constant in normal running, but **`@28` and `@33` are the alarm state
   machine** and both move on a trip — do not assume a constant byte is dead, which this whole file
   is a monument to. Byte 9 and byte 52 vary slightly and are unexplained.
@@ -240,6 +248,11 @@ after being marked unconfirmed since the beginning.
 14 each held one value for 2.5 hours (3, 16, 427, 10), which looked like a stalled sensor. A cooking
 session that afternoon moved all of them hard — AQI 3 → 202, tVOC 16 → 2417, PM2.5 0 → 40.4 — so
 nothing was wrong. Judge a sensor stuck only after something that should move it does not.
+
+**tVOC distinguishes frying from boiling; particles do not.** A frying session peaked at tVOC 2417
+and PM2.5 40.4; making jam the same evening peaked at tVOC 83 and PM2.5 **48.4**. So particles come
+from both, and a prediction that boiling would be low-particle was wrong — tVOC is the field that
+responds to fats.
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via

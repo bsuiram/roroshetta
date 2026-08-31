@@ -51,6 +51,7 @@ Captures taken so far, for reference:
 | 6-7 | ambient light | `value / 32` lux per `magicus/safera-ble`. Reads 25-157 lux (mean 108) on our frames. Dips when someone is at the hob — 114 lux with nobody there vs 100 with someone present — i.e. shadowing. Neither parser decodes it. |
 | 53 | `light` | 0 with light off, 90 with light on → `/30` = 3.0. Intermediate steps never observed. |
 | 56 | `fan` | 30 with fan on low → `/30` = 1.0. |
+| 58 | Motor 2 speed | Reproduces the Motor 2 preset table at `dcba @93-98` exactly, level for level, as `@57` does for Motor 1. |
 | 57 | *(unmapped)* | 0 with the fan off, 23 with it on low, in every capture. Fan-related. |
 | 59 | `grease_filter` | Constant within a capture, but the recorder shows 20 → 21 (08-27 14:43 UTC) → 22 (08-28 05:44 UTC): ~1 per 15 h, ~62 days for 0→100. Filter saturation in percent. |
 
