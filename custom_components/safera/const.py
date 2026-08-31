@@ -102,6 +102,21 @@ CMD_FILTER_CHANGED = 0x2009  # parameter 0 resets the grease filter counter
 # Byte 60 is an auto-mode bitmask. Any manual light or fan command clears the
 # corresponding bit — the hood drops out of auto as soon as it is driven by
 # hand, whether from Home Assistant, the app or its own panel.
+# Byte 33 is the stove-guard state machine, captured during a deliberate trip on
+# 2026-08-31: 2 normal, 7 pre-alarm (buzzer, 15 s), 8 alarm with the cooktop cut.
+DEVICE_STATE_NORMAL = 2
+DEVICE_STATE_PRE_ALARM = 7
+DEVICE_STATE_ALARM = 8
+DEVICE_STATES = {
+    DEVICE_STATE_NORMAL: "normal",
+    DEVICE_STATE_PRE_ALARM: "pre_alarm",
+    DEVICE_STATE_ALARM: "alarm",
+}
+
+# alarm_level trips at exactly 100, so it really is a percentage — it is not
+# capped there though, and was seen to keep climbing to 107 after the cut.
+ALARM_TRIP_LEVEL = 100
+
 AUTO_MASK_FAN = 0x01
 AUTO_MASK_LIGHT = 0x02
 

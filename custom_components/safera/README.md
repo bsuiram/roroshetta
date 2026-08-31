@@ -43,9 +43,16 @@ The integration provides the following sensors:
 - **Fan Speed**: Raw byte / 30. Observed 0 through 4.0
 - **Grease Filter**: Filter saturation in percent — a slow counter, climbs about 1 per 15 h
 - **Activity Level**: Presence at the hob — spikes when someone is there, then decays steadily to 0
-- **Alarm Level**: Stove-guard hazard integrator. Rises while the hob draws power, is knocked
-  back down by activity, and triggers the cooktop cut-off if it passes a threshold with nobody
-  present. The trip threshold is not known; the highest value ever observed is 35
+- **Alarm Level**: Stove-guard hazard integrator, in percent. Rises while the hob draws power, is
+  knocked back down by activity, and **trips at 100**, cutting power to the cooktop. It is not
+  capped at 100 — it was seen to reach 107 after a cut
+- **Device state**: `normal`, `pre_alarm` (buzzer, 15 seconds) or `alarm` (cooktop cut)
+
+### Binary sensors
+
+- **Stove alarm** — on during both the pre-alarm buzzer and the cooktop cut, so it fires when the
+  warning starts rather than only once power has gone
+- **Cooktop power cut** — on only while the hood is actually holding the cooktop off
 
 ## Controls
 

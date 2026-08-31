@@ -17,6 +17,7 @@ from .const import DOMAIN, SERVICE_SEND_COMMAND, SERVICE_WRITE_SETTING
 from .coordinator import SaferaConfigEntry, SaferaDataUpdateCoordinator
 
 PLATFORMS = [
+    Platform.BINARY_SENSOR,
     Platform.BUTTON,
     Platform.FAN,
     Platform.LIGHT,

@@ -199,22 +199,22 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
 
 ### Still open
 
-- **No alarm trip has ever been observed**, so `alarm_level`'s threshold is unknown — the highest
-  ever seen is 77, during a taco session. The hood's self-test is the cheap way to exercise this
-  without a genuinely dangerous pan. **The integration now subscribes to the device event log**
-  (see below) so a trip will be captured live rather than missed.
+- Bytes 61-68 are static at `00 00 00 00 00 00 00 ff` and unexplained.
 - **Bytes 6-7 are ambient light**, `value / 32` lux per `magicus/safera-ble`, and both parsers
   ignore them. That reads as 25-157 lux (mean 108) on our frames, right for a kitchen, and explains
   the dips when someone is at the hob as shadowing: mean 114 lux with nobody present versus 100 lux
   with someone there. It also kills the earlier raw-MOX-gas lead, which rested on a `tvoc`
   correlation of +0.66 on the idle baseline that flipped to **−0.44** during cooking.
-- Bytes 24-35 are near-constant and look like configuration or thresholds. Byte 9 and byte 52 vary
-  slightly.
-- **Intermediate light and fan steps have never been observed from the hood's own controls.** Set
-  that way, @53 has only ever read 0 or 90 and @56 only 0 or 30, so the `/30` scaling is an
-  inference from two points, not a measurement. BLE presets put 1 and 2 in @53, which does not fit
-  that scaling at all — see "Controlling the hood". @57 is now mapped: it is the raw motor speed.
-- **Bytes 61-68 are static** at `00 00 00 00 00 00 00 ff` and remain unexplained.
+- Bytes 24-35 are near-constant in normal running, but **`@28` and `@33` are the alarm state
+  machine** and both move on a trip — do not assume a constant byte is dead, which this whole file
+  is a monument to. Byte 9 and byte 52 vary slightly and are unexplained.
+- **The light's intermediate steps have never been observed from the hood's own controls** — set
+  that way, `@53` has only ever read 0 or 90. BLE presets put 1 and 2 there instead, which does not
+  fit the `/30` scaling at all; see "Controlling the hood". The fan's steps *have* now been seen:
+  during the 2026-08-31 taco session auto mode walked `@56` through 30, 60, 90 and 120, confirming
+  the `/30` level index, with `@57` reading raw speeds 23, 26, 36 and 82 respectively — markedly
+  non-linear, and all well below the 0-255 range a BLE speed command can reach.
+
 
 Values confirmed plausible on a real device: temp 23.4 °C, humidity 49 %, CO₂ 657 ppm, PM2.5
 6.1 µg/m³, AQI 22, uptime 3287464 s (~38 days). Note `uptime` is read as a 3-byte LE value via
@@ -314,7 +314,39 @@ three light presets.
 run while the coordinator still counts as disconnected, so reading earlier in the connect path fails
 every time.
 
-### Where an alarm should register
+### The alarm, captured 2026-08-31
+
+A deliberate trip settled every open question about the interlock. **`alarm_level` trips at exactly
+100**, so it really is a percentage — but it is **not capped there**, and kept climbing to 107 after
+the cooktop had already been cut. The trip is a crossing, not a ceiling.
+
+**Byte 33 is the state machine**, not byte 28 as the external table implies:
+
+| | normal | pre-alarm | cooktop cut | acknowledged |
+|---|---|---|---|---|
+| `@33` | 2 | **7** | **8** | 2 |
+| `@28` | 1 | **118, counting down 1/s** | 0 | 1 |
+| `@50` | 1 | **0** | **0** | 1 |
+| `power @46-47` | live | live | **0** | restored |
+
+The pre-alarm lasted **exactly 15 seconds** before power was cut — the buzzer window. `@28` counted
+down from 118 through it; what it was counting toward is unknown, because the state changed at 104.
+Acknowledging at the hood returned `@33` to 2 and `@50` to 1, and the presence spike from walking up
+to it (`activity` hit 58) collapsed `alarm_level` from 107 to 0 in about 90 seconds.
+
+The event log recorded it as well, which is what it was added for:
+
+| code | meaning |
+|---|---|
+| 1, 3 | cooking session start |
+| **103** | alarm raised — same second `@33` went to 7 |
+| **104** | cooktop cut — same second `@33` went to 8 |
+| 6 | after acknowledgement |
+
+`alarm_level`'s `PERCENTAGE` unit in `sensor.py` is therefore **correct**, vindicating the external
+table over the doubt recorded here earlier.
+
+### The event log
 
 `abcf` is the device event log: **a u16 count followed by 5-byte records of (event code, u32 LE
 device uptime in seconds)**. It reads and notifies, so the coordinator subscribes on connect and

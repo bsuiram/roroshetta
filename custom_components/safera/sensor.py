@@ -27,7 +27,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
-from .const import DOMAIN
+from .const import DEVICE_STATES, DOMAIN
 from .coordinator import (
     SaferaConfigEntry,
     SaferaDataUpdateCoordinator,
@@ -139,6 +139,15 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.power,
+    ),
+    SaferaSensorEntityDescription(
+        key="device_state",
+        name="Device state",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(DEVICE_STATES.values()),
+        value_fn=lambda coordinator: DEVICE_STATES.get(
+            coordinator.data.device_state
+        ),
     ),
     SaferaSensorEntityDescription(
         key="uptime",

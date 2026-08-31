@@ -122,6 +122,7 @@ class SaferaData:
     light_color: int | None = None
     fan_speed: int | None = None
     auto_flags: int | None = None
+    device_state: int | None = None
     activity: int | None = None
     alarm_level: int | None = None
     power: int | None = None
@@ -735,6 +736,7 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
         self.data.light_color = get_u16_le(55, 1)
         self.data.fan_speed = get_u16_le(57, 1)
         self.data.auto_flags = get_u16_le(60, 1)
+        self.data.device_state = get_u16_le(33, 1)
         self.data.grease_filter = get_u16_le(59, 1)
 
         _LOGGER.debug(

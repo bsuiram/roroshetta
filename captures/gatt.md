@@ -134,6 +134,14 @@ Establishing a known-disarmed state first is what made it fall out.
 panel, and stays 0 the whole time a BLE speed command has the motor running. `@57` is the actual
 motor speed in the same 0-255 units the command takes.
 
+### The alarm state machine
+
+A deliberate trip on 2026-08-31: `alarm_level` trips at exactly **100** and is not capped there —
+it reached 107 after the cut. `@33` is the state: **2 normal, 7 pre-alarm, 8 cooktop cut**, with
+`@28` counting down from 118 once per second through the 15-second pre-alarm, `@50` inverted (1
+normal, 0 while alarming), and `power @46-47` dropping to 0 on the cut. Event log codes **103** and
+**104** landed on the same seconds as the 7 and 8 transitions.
+
 ### The event log at `abcf`
 
 A u16 count followed by 5-byte records of **(event code, u32 LE device uptime in seconds)**. The
