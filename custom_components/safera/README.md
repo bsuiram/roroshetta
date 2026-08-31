@@ -41,8 +41,9 @@ The integration provides the following sensors:
 - **Uptime**: Device uptime in seconds
 - **Light brightness** and **Fan speed**: the actual live values as percentages, from bytes 54 and
   57 — what the lamp and motor are really doing
-- **Light colour temperature**: from byte 55, as `2700 + byte * 9` Kelvin. Reports unknown while the
-  lamp is off, since all three light bytes zero out then and 2700 K would be a lie
+- **Light colour temperature**: from byte 55, as `2700 + byte * 9` Kelvin. Reads 0 while the lamp is
+  off, matching the brightness sensor, which reads 0 for the same state. Unknown is reserved for
+  "no frame received yet"
 - **Grease Filter**: Filter saturation in percent — a slow counter, climbs about 1 per 15 h
 - **Activity Level**: Presence at the hob — spikes when someone is there, then decays steadily to 0
 - **Alarm Level**: Stove-guard hazard integrator, in percent. Rises while the hob draws power, is

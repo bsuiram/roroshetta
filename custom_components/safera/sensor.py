@@ -174,9 +174,15 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
         # unit, turning a colour temperature into degrees Celsius.
         native_unit_of_measurement=UnitOfTemperature.KELVIN,
         state_class=SensorStateClass.MEASUREMENT,
+        # 0 while the lamp is off, matching the brightness sensor, which reads 0
+        # for the same state because byte 54 zeroes out too. None is reserved
+        # for "no frame yet" so that genuinely missing data stays distinct from
+        # a lamp that is simply off.
         value_fn=lambda coordinator: (
             None
-            if not coordinator.data.light_raw or coordinator.data.light_color is None
+            if coordinator.data.light_raw is None or coordinator.data.light_color is None
+            else 0
+            if not coordinator.data.light_raw
             else LIGHT_KELVIN_BASE + coordinator.data.light_color * LIGHT_KELVIN_PER_STEP
         ),
     ),
