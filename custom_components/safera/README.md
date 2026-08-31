@@ -50,6 +50,16 @@ The integration provides the following sensors:
 - **Last OK pressed**: when the hood's OK button was last pressed. The hood keeps no such timer —
   it timestamps the press in its own uptime, and this derives the wall-clock moment from that
 
+### Diagnostic sensors
+
+Filed under the device page's Diagnostic section rather than with the environment sensors, and kept
+off the auto-generated dashboard — visible and usable, just shelved as information about the device.
+
+- **Mounting height** — the configured sensor height in cm, mirrored live from the settings block
+- **Pitch** and **Roll** — auto-detected mounting angles in degrees, signed. These are live
+  accelerometer readings and drift by a degree frame to frame. Pitch moved 10° between 2026-08-28
+  and 08-31 without anyone noticing, so they are worth a glance if alignment ever matters
+
 ### Binary sensors
 
 - **Stove alarm** — on during both the pre-alarm buzzer and the cooktop cut, so it fires when the

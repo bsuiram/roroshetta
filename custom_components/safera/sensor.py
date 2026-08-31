@@ -15,6 +15,9 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    DEGREE,
+    EntityCategory,
+    UnitOfLength,
     PERCENTAGE,
     UnitOfDensity,
     UnitOfPower,
@@ -140,6 +143,30 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: coordinator.data.power,
+    ),
+    SaferaSensorEntityDescription(
+        key="mounting_height",
+        name="Mounting height",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.CENTIMETERS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.data.mounting_height,
+    ),
+    SaferaSensorEntityDescription(
+        key="pitch",
+        name="Pitch",
+        native_unit_of_measurement=DEGREE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.data.pitch,
+    ),
+    SaferaSensorEntityDescription(
+        key="roll",
+        name="Roll",
+        native_unit_of_measurement=DEGREE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.data.roll,
     ),
     SaferaSensorEntityDescription(
         key="last_ok_press",

@@ -88,6 +88,11 @@ DIS_FIELDS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _signed8(value: int) -> int:
+    """Reinterpret a byte as a signed 8-bit value."""
+    return value - 256 if value > 127 else value
+
+
 def format_sw_version(values: dict[str, str]) -> str | None:
     """Combine the two revision strings the hood reports into one label.
 
@@ -125,6 +130,11 @@ class SaferaData:
     fan_speed: int | None = None
     auto_flags: int | None = None
     device_state: int | None = None
+    # Mounting geometry. Height is the configured value mirrored from the
+    # settings block; pitch and roll are live accelerometer readings, signed.
+    mounting_height: int | None = None
+    pitch: int | None = None
+    roll: int | None = None
     activity: int | None = None
     alarm_level: int | None = None
     power: int | None = None
@@ -818,6 +828,9 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
         self.data.fan_speed = get_u16_le(57, 1)
         self.data.auto_flags = get_u16_le(60, 1)
         self.data.device_state = get_u16_le(33, 1)
+        self.data.mounting_height = get_u16_le(8, 1)
+        self.data.pitch = _signed8(get_u16_le(29, 1))
+        self.data.roll = _signed8(get_u16_le(31, 1))
         self.data.grease_filter = get_u16_le(59, 1)
 
         _LOGGER.debug(
