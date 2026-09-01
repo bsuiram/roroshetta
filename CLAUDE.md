@@ -314,6 +314,16 @@ Safera app or the hood's own controls alike. Switching the hood light on from HA
 auto-starting the next time someone cooks, until the auto switch is turned back on. The two switch
 entities exist to make that visible and reversible rather than a silent surprise.
 
+**Arming light auto applies a preset immediately, and that is normal.** Enabling it has been seen
+to switch the lamp on about a second later at preset 3 — the Active cooking preset — with no command
+from Home Assistant: the logbook records those transitions with no context at all, so the hood is
+acting on its own. It does not always fire; on one occasion arming auto left the lamp off. The hood
+is evaluating its automation rules the moment it is armed, and the outcome depends on presence and
+on whether a cooking session is still latched at `@43`, which holds for ~15 minutes after the hob
+goes off. This was mistaken for a fault on 2026-08-31. If it needs investigating again, the two
+facts worth recording at the time are whether anyone was near the hood and whether the hob had been
+on in the previous fifteen minutes — they separate normal behaviour from a real fault immediately.
+
 This also settles the 2026-08-27 readings that looked contradictory: 3 while idle, 1 with the light
 on, 0 with the fan on. Those are not an operating state at all — they are auto bits being cleared by
 the manual actions that turned the light and fan on. And it confirms the cooking session
