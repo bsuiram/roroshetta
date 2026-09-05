@@ -104,6 +104,12 @@ push data → sensor entities read from `coordinator.data`.
   `entity.py`'s `SaferaEntity` for device wiring and availability. `sensor.py` deliberately does
   **not** use it — its entities predate the base and switching them over risks changing unique ids
   or names, which would orphan history. New platforms should use it.
+- **`parser.py` holds the frame decoding and imports neither Home Assistant nor bleak.**
+  `coordinator._parse_data` is now just "call `parse_frame`, copy the fields onto `self.data`". That
+  split is what makes the decoding testable — see "Tests" below — so keep new offsets in `parser.py`
+  and resist pulling anything HA-shaped into it. It raises `ValueError` on a frame shorter than
+  `FRAME_MIN_LENGTH` (61) rather than returning junk; the old guard was `< 60`, which let a 60-byte
+  frame through and then read `auto_flags` off an empty slice as 0.
 - **`sensor.py` is table-driven.** Each sensor is a `SaferaSensorEntityDescription` with a
   `value_fn(coordinator)`; adding a sensor means adding a field to the `SaferaData` dataclass,
   a decode line in `_parse_data`, and one entry in the `SENSORS` tuple.
@@ -182,6 +188,27 @@ offsets that were previously marked unsure, and corrected one that was wrongly a
   after it stopped, which looks like auto-start and run-on rather than button presses. Data cannot
   distinguish the two; do not assume a control change was user-initiated.
 
+### Fields taken from crillebaba/safera-sense-ble
+
+An independent integration for the same hardware, found 2026-09-05:
+[crillebaba/ha-safera-sense](https://github.com/CrilleBaba/ha-safera-sense) plus its
+`safera-sense-ble` PyPI library. It decodes several bytes this component did not, all now added as
+diagnostics: `voc_index @14`, `accessories @25`, `battery @26`, `alarm_status @28`,
+`sensor_errors @34-35`, `pcu_errors @40` and `activity_type @43`.
+
+`@25`, `@26`, `@34-35` and `@40` are **constant in every frame ever captured here** — 1, 100, 0 and
+0. That is the argument for surfacing them rather than against it: this file is a monument to
+constant bytes that turned out to be alive the moment the right thing happened, `power @46-47` most
+embarrassingly.
+
+Two of its decodes do **not** survive our data and were not adopted: `@14` as `/20` "UBA index 1-5"
+(see above) and `heat_index = @24 × 2`, which puts the value at 22-152 °C. Its ambient light at
+`@6-7` is also unsigned, which is the bug fixed here on 2026-08-31.
+
+Worth knowing about it beyond the fields: it keeps the BLE protocol in a **separate PyPI package**,
+which is the architecture Home Assistant actually wants, and it reads a **WiFi status
+characteristic** we have never touched.
+
 ### Where the external table disagrees
 
 [magicus/safera-ble](https://github.com/magicus/safera-ble/discussions/1) documents a "54+ byte"
@@ -205,6 +232,12 @@ Everything else it lists agrees, including several of our constant bytes: `@26` 
 
 ### Still open
 
+- **`@14` is a coarse tVOC band index.** Across all 16202 recorded frames it takes 16 distinct
+  values from 10 to 25, and each one maps to a clean, non-overlapping tVOC range — 10 covers
+  everything up to ~48 µg/m³, then roughly 30-40 µg/m³ per step, up to 25 at ~530-560. Strictly
+  monotonic, so it is derived from tVOC. The *scale* is unknown, so it is exposed raw as
+  `voc_index`. `crillebaba/safera-sense-ble` reads it as `byte / 20` and labels it a UBA index 1-5,
+  which our data contradicts flatly: that would put every frame ever captured between 0.5 and 1.25.
 - Bytes 61-68 are static at `00 00 00 00 00 00 00 ff` and unexplained.
 - ~~Bytes 6-7~~ **resolved and exposed**: ambient light, `value / 32` lux — and **signed**. Proved
   by switching the kitchen lights off: 55 lux with room and hood lamp, 20 with the hood lamp alone,
@@ -293,12 +326,21 @@ Things that shaped the implementation, all learned the hard way:
   the last non-zero values and re-applies them on turn-on.
 - **Brightness 0 is a dim floor, not off.** Turning the lamp off has to go through the preset
   command. Confirmed by eye.
-- **`@56` and `@57` are different things.** `@56` is a level index the hood's own controller
-  maintains — it reads 30 with the fan on low from the panel and stays **0** while a BLE speed
-  command drives the motor. `@57` is the actual motor speed in the same 0-255 units the command
+- **`@56` and `@57` are different things, and which command you send decides whether `@56` stays
+  honest.** `@56` is a level index the hood's own controller maintains — it reads 30 with the fan on
+  low from the panel. `@57` is the actual motor speed in the same 0-255 units `CMD_MOTOR_RAW_SPEED`
   takes, and it tracked a commanded sweep (0 → 50 → 100 → 180 → 255 → 0) exactly, ramping between
-  steps. The fan entity uses `@57`, so it has real feedback; the `fan_level` *sensor* still reads
-  `@56` and will sit at 0 whenever HA is driving the fan. That is not a bug.
+  steps.
+
+  **`fan.py` drives `CMD_MOTOR_SPEED_STEP` (`0x2001`), not the raw command**, because the step
+  command's parameter is `level × 30` — the identical encoding `@56` reports back. Driving the raw
+  command instead moves the motor while `@56` sits at **0**, because the hood's own controller never
+  learns the speed changed, so the panel, the `fan_level` sensor and the hood's automatic mode all
+  disagree with reality for as long as HA is in control. That was the old behaviour here and it was
+  written off as "not a bug"; it was a consequence of picking the wrong command, and
+  `crillebaba/safera-sense-ble` had this right first. `0x2001` is **not yet confirmed on this
+  hood** — the level table (`FAN_LEVEL_COUNT = 5`, boost at `@56` = 150) comes from the six Motor 1
+  preset slots at settings `@86-91`, and only levels 1-4 have ever been seen on the wire.
 - **Above roughly 180 the motor is not audibly different**, though `@57` still reports the value.
 - **The Kelvin mapping is measured, not assumed.** The app showed 2790 K, 2970 K and 2943 K for
   stored preset bytes 10, 30 and 27 — an exact fit for **`K = 2700 + byte × 9`**. So the lamp runs
@@ -482,6 +524,32 @@ Four bugs here cost real debugging time and are easy to reintroduce:
 The broad `except Exception` in `_run_notify_loop` is what turned the first two into silent
 misbehaviour rather than a traceback. Be suspicious of it when a symptom looks like "works once,
 then nothing".
+
+## Tests
+
+`pytest` from the repo root. **No Home Assistant, no bleak, no hardware** — `tests/conftest.py`
+loads `parser.py` and `const.py` by file path, which works precisely because neither imports
+anything HA-shaped. `.github/workflows/tests.yaml` runs the same command on every push.
+
+47 tests covering the decoding and the discovery matchers. Several are regression guards for bugs
+that actually happened here, and those are the ones worth not deleting:
+
+- signed illuminance — an unsigned read turns a dark kitchen into 2047 lux
+- the 60-byte frame that used to pass the length guard and silently read `auto_flags` as 0
+- `level × FAN_LEVEL_STEP` round-tripping through byte 56, which is the whole reason the fan uses
+  the step command
+- byte 53's two encodings both decoding
+- `Roroshetta` matching and `Røroshetta*` **not** matching, asserted in both directions
+- the manifest's `local_name` matchers agreeing with `ADVERTISED_NAME_PATTERNS`
+
+The recorded frames in `tests/test_parser.py` are four real payloads — idle, cooking, pre-alarm and
+cooktop-cut. They are deliberately a handful and not a capture: the repo is public and captures stay
+in `~/priv/roroshetta-captures/`. They earn their place because a purely synthetic suite would pass
+happily against a decode that had drifted from the device.
+
+**These tests say nothing about entity behaviour.** Anything that imports Home Assistant — the
+platforms, the config flow, the coordinator's connection loop — is still untested, and would need
+`pytest-homeassistant-custom-component`.
 
 ## Verifying a change without hardware
 

@@ -67,9 +67,24 @@ COOKER_WIDTHS = (50, 60, 70, 80, 90, 100)
 FAN_PRESET_MAX = 254
 LIGHT_PRESET_BRIGHTNESS_MAX = 255
 
-# Names the hardware actually advertises. The Roroshetta units are rebadged
-# Safera hoods, so both are matched: renaming this integration must not stop it
-# recognising a hood that still calls itself Roroshetta Sense.
+# Local names the hardware advertises, as fnmatch patterns so the manifest's
+# bluetooth matchers and the config flow agree on what counts as a hood.
+#
+# The Roroshetta units are rebadged Safera hoods, so both are matched: renaming
+# this integration must not stop it recognising a hood that still calls itself
+# Roroshetta Sense. Note it advertises "Roroshetta", with a plain o — the
+# "Røroshetta*" pattern crillebaba/ha-safera-sense uses would not match it.
+# "iSense*" and "Sense_*" cover Safera's other product names; they come from
+# crillebaba/ha-safera-sense and are unverified against hardware here, but a
+# surplus matcher only ever offers a config flow the user can dismiss, while a
+# missing one makes a device undiscoverable.
+ADVERTISED_NAME_PATTERNS = (
+    "Roroshetta Sense",
+    "Safera Sense",
+    "iSense*",
+    "Sense_*",
+)
+# Kept as the exact-match subset for anything that wants literal names.
 ADVERTISED_NAMES = ("Roroshetta Sense", "Safera Sense")
 
 # Advertised identifiers, kept in sync with the matchers in manifest.json
@@ -104,6 +119,7 @@ STOP_TIMEOUT_SECONDS = 5
 # Command codes, from magicus/safera-ble and verified against this hood on
 # 2026-08-28 except where noted. Payload is a 4-byte LE code then a 4-byte LE
 # parameter, written to BABE_CHARACTERISTIC.
+CMD_MOTOR_SPEED_STEP = 0x2001  # parameter is level * 30, matching byte 56
 CMD_MOTOR_RAW_SPEED = 0x2002  # parameter 0-255, 0 stops the motor
 CMD_MOTOR_AUTO_MODE = 0x2004  # 1 enables fan auto, 0 disables
 CMD_LIGHT_PRESET = 0x2005  # 0 off, 1 on
@@ -127,6 +143,12 @@ DEVICE_STATES = {
     DEVICE_STATE_ALARM: "alarm",
 }
 
+# Byte 43, the cooking-session latch: 0 idle, 2 while a session is active. It
+# sets on the frame hob power first goes nonzero and clears about fifteen
+# minutes after the hob goes off.
+ACTIVITY_TYPE_IDLE = 0
+ACTIVITY_TYPE_COOKING = 2
+
 # alarm_level trips at exactly 100, so it really is a percentage — it is not
 # capped there though, and was seen to keep climbing to 107 after the cut.
 ALARM_TRIP_LEVEL = 100
@@ -145,9 +167,25 @@ LIGHT_KELVIN_PER_STEP = 9
 LIGHT_MIN_KELVIN = LIGHT_KELVIN_BASE
 LIGHT_MAX_KELVIN = LIGHT_KELVIN_BASE + 255 * LIGHT_KELVIN_PER_STEP
 
-# The motor takes 0-255. Anything above roughly 180 was not audibly different,
-# though byte 57 does report the higher values back.
-FAN_SPEED_RANGE = (1, 255)
+# CMD_MOTOR_RAW_SPEED takes 0-255 and byte 57 reports the same units back.
+# Anything above roughly 180 was not audibly different. The fan entity no longer
+# uses the raw command — see FAN_LEVEL_STEP below — but it is still reachable
+# through the safera.send_command action.
+FAN_RAW_SPEED_MAX = 255
+
+# The hood's own speed levels. ``CMD_MOTOR_SPEED_STEP`` takes the level scaled
+# by 30 — the identical encoding byte 56 reports back — so driving the fan this
+# way keeps the hood's level index meaningful. ``CMD_MOTOR_RAW_SPEED`` does not:
+# it moves the motor while byte 56 sits at 0, because the hood's own controller
+# never learns about the change.
+#
+# Five levels, matching the six Motor 1 preset slots at settings @86-91 (level 0
+# plus levels 1-4 plus boost). Levels 1-4 were seen directly during the
+# 2026-08-31 session, where auto mode walked byte 56 through 30, 60, 90 and 120.
+# Boost as level 5 (byte 56 = 150) follows from the preset table but has not
+# been observed on the wire.
+FAN_LEVEL_STEP = 30
+FAN_LEVEL_COUNT = 5
 
 # Commands are rate limited. The hood is a stove guard on a single BLE
 # connection and a burst of writes has dropped the link before.

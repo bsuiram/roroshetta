@@ -10,15 +10,19 @@ from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util.percentage import (
-    percentage_to_ranged_value,
-    ranged_value_to_percentage,
+    ordered_list_item_to_percentage,
+    percentage_to_ordered_list_item,
 )
 
-from .const import CMD_MOTOR_RAW_SPEED, FAN_SPEED_RANGE
+from .const import CMD_MOTOR_SPEED_STEP, FAN_LEVEL_COUNT, FAN_LEVEL_STEP
 from .coordinator import SaferaConfigEntry, SaferaDataUpdateCoordinator
 from .entity import SaferaEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+# Levels 1..FAN_LEVEL_COUNT, in the order Home Assistant should step through
+# them. Level 0 is "off" and is not a member.
+_LEVELS = list(range(1, FAN_LEVEL_COUNT + 1))
 
 
 async def async_setup_entry(
@@ -31,18 +35,26 @@ async def async_setup_entry(
 
 
 class SaferaFan(SaferaEntity, FanEntity):
-    """The hood's extraction fan.
+    """The hood's extraction fan, driven by the hood's own speed levels.
 
-    ``CMD_MOTOR_RAW_SPEED`` takes 0-255 and byte 57 reports the actual motor
-    speed in the same units, so unlike the light this has real feedback rather
-    than optimistic state. Confirmed by a commanded sweep on 2026-08-28.
+    This deliberately uses ``CMD_MOTOR_SPEED_STEP`` rather than the raw
+    0-255 ``CMD_MOTOR_RAW_SPEED``. Both move the motor, but only the step
+    command keeps the hood's own controller in the loop: it takes the level
+    scaled by 30, which is the exact encoding byte 56 reports back.
 
-    Note byte 56, which the fan *sensor* exposes, is a different thing: it is a
-    level index the hood's own controller maintains and it stays at 0 while a
-    BLE speed command is driving the motor.
+    Driving the raw command instead moves the motor while byte 56 stays at 0,
+    because the hood never learns the speed changed — so the ``fan_level``
+    sensor, the hood's panel and its automatic mode all disagree with reality
+    for as long as Home Assistant is in control. That was the old behaviour
+    here, and the sensor reading 0 mid-run was written off as "not a bug".
+
+    Byte 57, the true motor speed in raw units, is still read and still exposed
+    as its own sensor. It remains the honest answer to "how fast is it actually
+    turning", and it is used here as a fallback for on/off.
     """
 
     _attr_name = "Fan"
+    _attr_speed_count = FAN_LEVEL_COUNT
     _attr_supported_features = (
         FanEntityFeature.SET_SPEED
         | FanEntityFeature.TURN_ON
@@ -54,32 +66,53 @@ class SaferaFan(SaferaEntity, FanEntity):
         super().__init__(coordinator, "fan")
 
     @property
-    def is_on(self) -> bool | None:
-        """Whether the motor is turning, from byte 57."""
-        speed = self.coordinator.data.fan_speed
-        if speed is None:
+    def _level(self) -> int | None:
+        """Current speed level from byte 56, clamped to the levels we know."""
+        level = self.coordinator.data.fan
+        if level is None:
             return None
-        return speed > 0
+        return min(level, FAN_LEVEL_COUNT)
+
+    @property
+    def is_on(self) -> bool | None:
+        """Whether the motor is turning.
+
+        Byte 56 is the level the hood believes it is at; byte 57 is the motor
+        actually moving. Either being nonzero means on — during a ramp, and
+        while the hood's automatic mode is driving things, they briefly
+        disagree, and reporting off while the motor spins is the worse error.
+        """
+        level = self._level
+        speed = self.coordinator.data.fan_speed
+        if level is None and speed is None:
+            return None
+        return bool(level) or bool(speed)
 
     @property
     def percentage(self) -> int | None:
-        """Current speed as a percentage of the raw 1-255 range."""
-        speed = self.coordinator.data.fan_speed
-        if speed is None:
+        """Current level as a percentage of the five available levels."""
+        level = self._level
+        if level is None:
             return None
-        if speed == 0:
+        if level <= 0:
+            # The hood's own controller can be running the motor at a speed it
+            # has no level for. Report the lowest level rather than 0%, which
+            # Home Assistant reads as off and would contradict is_on.
+            speed = self.coordinator.data.fan_speed
+            if speed:
+                return ordered_list_item_to_percentage(_LEVELS, _LEVELS[0])
             return 0
-        # Never round a turning motor down to 0%: Home Assistant reads 0% as
-        # off, which would contradict is_on and make the entity flicker.
-        return max(1, ranged_value_to_percentage(FAN_SPEED_RANGE, speed))
+        return ordered_list_item_to_percentage(_LEVELS, level)
 
     async def async_set_percentage(self, percentage: int) -> None:
-        """Set the motor speed. 0 stops it."""
+        """Set the speed level. 0 stops the motor."""
         if percentage == 0:
-            raw = 0
+            level = 0
         else:
-            raw = math.ceil(percentage_to_ranged_value(FAN_SPEED_RANGE, percentage))
-        await self.coordinator.async_send_command(CMD_MOTOR_RAW_SPEED, raw)
+            level = percentage_to_ordered_list_item(_LEVELS, percentage)
+        await self.coordinator.async_send_command(
+            CMD_MOTOR_SPEED_STEP, level * FAN_LEVEL_STEP
+        )
 
     async def async_turn_on(
         self,
@@ -87,8 +120,16 @@ class SaferaFan(SaferaEntity, FanEntity):
         preset_mode: str | None = None,
         **kwargs: Any,
     ) -> None:
-        """Start the fan, defaulting to full speed."""
-        await self.async_set_percentage(percentage if percentage is not None else 100)
+        """Start the fan, defaulting to the middle level.
+
+        Full speed is a poor default for a cooker hood — it is loud, and the
+        hood's own controls start low.
+        """
+        if percentage is None:
+            percentage = ordered_list_item_to_percentage(
+                _LEVELS, _LEVELS[math.floor((FAN_LEVEL_COUNT - 1) / 2)]
+            )
+        await self.async_set_percentage(percentage)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Stop the fan."""
