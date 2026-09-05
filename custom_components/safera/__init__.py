@@ -55,6 +55,11 @@ SEND_COMMAND_SCHEMA = vol.Schema(
     }
 )
 
+# There is no YAML configuration — the hood is set up through the config flow
+# only. ``async_setup`` exists purely to register the domain-wide actions, and
+# hassfest requires a schema alongside it.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register domain-wide actions.

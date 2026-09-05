@@ -12,7 +12,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # manifest.json is the source of truth for the version. Rather than having a
       # bot rewrite it from the tag, refuse to publish when the two disagree — that
