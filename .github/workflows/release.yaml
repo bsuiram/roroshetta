@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # manifest.json is the source of truth for the version. Rather than having a
+      # bot rewrite it from the tag, refuse to publish when the two disagree — that
+      # mismatch is the only mistake this workflow needs to catch.
+      - name: Check the tag matches manifest.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(python3 -c "import json;print(json.load(open('custom_components/safera/manifest.json'))['version'])")
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::tag $GITHUB_REF_NAME implies version $tag, but manifest.json says $manifest"
+            exit 1
+          fi
+          echo "version $manifest"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes

@@ -1,0 +1,22 @@
+name: HACS
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 4 * * *"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          category: integration
+          # The `brands` check looks the domain up in home-assistant/brands, which
+          # only applies to integrations shipped in the HACS default store. This one
+          # installs as a custom repository, so the lookup will always fail.
+          ignore: brands
