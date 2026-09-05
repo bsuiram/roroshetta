@@ -4,9 +4,15 @@ rules:
   appropriate-polling:
     status: exempt
     comment: Push-based integration, data arrives via GATT notifications
-  brands: done
+  brands:
+    status: todo
+    comment: >-
+      No home-assistant/brands submission exists, so the safera domain falls back to a
+      generic icon. Out of scope while this ships as a HACS custom repository.
   common-modules: done
-  config-flow-test-coverage: done
+  config-flow-test-coverage:
+    status: todo
+    comment: There is no test suite in this repository yet.
   config-flow: done
   dependency-transparency: done
   docs-actions: done
