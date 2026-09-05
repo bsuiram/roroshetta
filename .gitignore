@@ -6,3 +6,7 @@ __pycache__/
 # Frame captures live in ~/priv/roroshetta-captures/
 *.tsv
 captures/*.tsv
+
+# Local test virtualenv
+.venv-test/
+.pytest_cache/

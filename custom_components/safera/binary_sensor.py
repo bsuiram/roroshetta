@@ -14,8 +14,8 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DEVICE_STATE_ALARM, DEVICE_STATE_PRE_ALARM
-from .coordinator import SaferaConfigEntry, SaferaDataUpdateCoordinator
+from .const import ACTIVITY_TYPE_COOKING, DEVICE_STATE_ALARM, DEVICE_STATE_PRE_ALARM
+from .coordinator import SaferaConfigEntry, SaferaData, SaferaDataUpdateCoordinator
 from .entity import SaferaEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,8 +23,9 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass(frozen=True, kw_only=True)
 class SaferaBinarySensorDescription(BinarySensorEntityDescription):
-    """A binary sensor derived from the stove-guard state."""
+    """A binary sensor derived from one byte of the status frame."""
 
+    source_fn: Callable[[SaferaData], int | None]
     is_on_fn: Callable[[int | None], bool | None]
 
 
@@ -42,13 +43,26 @@ BINARY_SENSORS: tuple[SaferaBinarySensorDescription, ...] = (
         key="stove_alarm",
         name="Stove alarm",
         device_class=BinarySensorDeviceClass.SAFETY,
+        source_fn=lambda data: data.device_state,
         is_on_fn=_in_states(DEVICE_STATE_PRE_ALARM, DEVICE_STATE_ALARM),
     ),
     SaferaBinarySensorDescription(
         key="cooktop_power_cut",
         name="Cooktop power cut",
         device_class=BinarySensorDeviceClass.PROBLEM,
+        source_fn=lambda data: data.device_state,
         is_on_fn=_in_states(DEVICE_STATE_ALARM),
+    ),
+    # Byte 43, the cooking-session latch. It sets on the frame hob power first
+    # goes nonzero and clears roughly fifteen minutes after the hob goes off,
+    # so it stays on through the hood's run-on — which is also the window in
+    # which arming light auto can switch the lamp on by itself.
+    SaferaBinarySensorDescription(
+        key="cooking",
+        name="Cooking",
+        device_class=BinarySensorDeviceClass.RUNNING,
+        source_fn=lambda data: data.activity_type,
+        is_on_fn=_in_states(ACTIVITY_TYPE_COOKING),
     ),
 )
 
@@ -66,7 +80,9 @@ async def async_setup_entry(
 
 
 class SaferaBinarySensor(SaferaEntity, BinarySensorEntity):
-    """The stove guard's alarm state, from byte 33.
+    """A condition derived from one byte of the status frame.
+
+    The alarm states come from byte 33.
 
     Captured during a deliberate trip on 2026-08-31: the state went 2 → 7 when
     ``alarm_level`` reached 100, then 7 → 8 fifteen seconds later as the cooktop
@@ -89,5 +105,6 @@ class SaferaBinarySensor(SaferaEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        """Whether this alarm condition is active."""
-        return self.entity_description.is_on_fn(self.coordinator.data.device_state)
+        """Whether this condition is active."""
+        description = self.entity_description
+        return description.is_on_fn(description.source_fn(self.coordinator.data))

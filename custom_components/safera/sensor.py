@@ -129,6 +129,10 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
     ),
     SaferaSensorEntityDescription(
         key="fan",
+        # Byte 56, the hood's own level index. The fan entity drives the hood
+        # with CMD_MOTOR_SPEED_STEP, which writes this same encoding, so it now
+        # tracks Home Assistant's commands as well as the hood's own controls.
+        # It used to sit at 0 whenever Home Assistant was driving the motor.
         name="Fan preset level",
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
@@ -236,6 +240,55 @@ SENSORS: tuple[SaferaSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfTime.SECONDS,
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda coordinator: coordinator.data.uptime,
+    ),
+    # Fields also decoded by crillebaba/safera-sense-ble. All diagnostics: four
+    # of them are constant in every frame captured here, and are exposed so a
+    # change becomes visible rather than invisible.
+    SaferaSensorEntityDescription(
+        key="battery",
+        name="Battery",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        device_class=SensorDeviceClass.BATTERY,
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda coordinator: coordinator.data.battery,
+    ),
+    SaferaSensorEntityDescription(
+        key="voc_index",
+        name="VOC index",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
+        # Byte 14 raw, with no scaling. It is a coarse band index derived from
+        # tVOC — 16 distinct values from 10 to 25 across 16202 frames, each
+        # mapping to a clean tVOC range — but the scale itself is unknown, so
+        # inventing a unit would be inventing precision.
+        value_fn=lambda coordinator: coordinator.data.voc_index,
+    ),
+    SaferaSensorEntityDescription(
+        key="alarm_status",
+        name="Alarm status",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        # 1 normally; counts down once a second through the pre-alarm buzzer
+        # window, then 0 once the cooktop is cut.
+        value_fn=lambda coordinator: coordinator.data.alarm_status,
+    ),
+    SaferaSensorEntityDescription(
+        key="sensor_errors",
+        name="Sensor errors",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.data.sensor_errors,
+    ),
+    SaferaSensorEntityDescription(
+        key="pcu_errors",
+        name="PCU errors",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.data.pcu_errors,
+    ),
+    SaferaSensorEntityDescription(
+        key="accessories",
+        name="Connected accessories",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.data.accessories,
     ),
 )
 

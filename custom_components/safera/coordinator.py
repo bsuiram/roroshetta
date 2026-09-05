@@ -55,6 +55,7 @@ from .const import (
     STALE_AFTER_SECONDS,
     STOP_TIMEOUT_SECONDS,
 )
+from .parser import parse_frame
 
 if TYPE_CHECKING:
     pass
@@ -86,11 +87,6 @@ DIS_FIELDS: tuple[tuple[str, str], ...] = (
     ("firmware_rev", DIS_FIRMWARE_REV),
     ("software_rev", DIS_SOFTWARE_REV),
 )
-
-
-def _signed8(value: int) -> int:
-    """Reinterpret a byte as a signed 8-bit value."""
-    return value - 256 if value > 127 else value
 
 
 def format_sw_version(values: dict[str, str]) -> str | None:
@@ -140,6 +136,18 @@ class SaferaData:
     alarm_level: int | None = None
     power: int | None = None
     uptime: int | None = None
+    # Fields the external decoding in crillebaba/safera-sense-ble reads and we
+    # previously did not. All are diagnostics: @25, @26, @34-35 and @40 are
+    # constant in every frame captured here, which is exactly the argument for
+    # surfacing them — a constant byte that starts moving is a signal, and this
+    # component has been caught twice assuming a still byte was a dead one.
+    voc_index: int | None = None
+    accessories: int | None = None
+    battery: int | None = None
+    alarm_status: int | None = None
+    sensor_errors: int | None = None
+    pcu_errors: int | None = None
+    activity_type: int | None = None
 
 
 class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
@@ -796,65 +804,21 @@ class SaferaDataUpdateCoordinator(DataUpdateCoordinator[SaferaData]):
             attempt += 1
 
     def _parse_data(self, data: bytes) -> None:
-        """Parse the data from the device."""
+        """Decode one status frame into ``self.data``."""
         # Logged before the length check so undersized frames are captured too.
         _FRAME_LOGGER.debug("%d %s", len(data), data.hex())
-        if len(data) < 60:
-            _LOGGER.warning("Received data too short: %d bytes", len(data))
+        try:
+            values = parse_frame(data)
+        except ValueError as err:
+            _LOGGER.warning("Discarding unusable frame: %s", err)
             return
 
-        def get_u16_le(offset: int, length: int = 2) -> int:
-            return int.from_bytes(data[offset : offset + length], "little")
+        for field, value in values.items():
+            setattr(self.data, field, value)
 
-        # Parse sensor data as in the test.py
-        self.data.temperature = (get_u16_le(0, 2) + 10000) / 100 - 150
-        self.data.heat_index = (get_u16_le(2, 2) + 10000) / 100 - 150
-        self.data.humidity = get_u16_le(4, 2) / 100
-        # Bytes 6-7, value / 32 lux, and **signed**. Confirmed as a real light
-        # sensor: the hood's lamp lifts it from ~20 to ~55 lux and a person at
-        # the hob shadows it downward. In true darkness it reads slightly below
-        # zero — 0xffd8 is −40, about −1.25 lux — so reading it unsigned turns
-        # a dark kitchen into 2047 lux, the exact opposite of the truth.
-        # Negative illuminance is meaningless, so it is floored at zero.
-        illuminance = get_u16_le(6, 2)
-        if illuminance > 32767:
-            illuminance -= 65536
-        self.data.illuminance = max(0.0, illuminance / 32)
-        self.data.aqi = get_u16_le(10, 2)
-        # @12-13 / 5, per magicus/safera-ble. The old @13 / 1000 was wrong: byte
-        # 13 is zero in all 12604 frames ever captured, so it really computed
-        # byte14 * 0.256 and invented three decimals of precision. The app reads
-        # 0.0 when this decode reads 0.0, which is what settles it.
-        self.data.pm25 = get_u16_le(12, 2) / 5
-        self.data.co2 = get_u16_le(15, 2)
-        self.data.tvoc = get_u16_le(17, 2)
-        self.data.uptime = get_u16_le(36, 3)
         if self._pending_ok_uptime is not None:
             pending, self._pending_ok_uptime = self._pending_ok_uptime, None
             self._record_ok_press(pending)
-        self.data.alarm_level = get_u16_le(44, 1)
-        self.data.activity = get_u16_le(45, 1)
-        self.data.power = get_u16_le(46, 2)
-        # Byte 53 carries the light preset in two different encodings. The hood
-        # and its auto logic write preset * 30 (90 for preset 3, matching the
-        # fan's byte 56), while CMD_LIGHT_PRESET writes the parameter literally,
-        # so our own commands leave 1 or 2 there. Normalise both to the preset
-        # number the app shows rather than pick a divisor that is wrong half the
-        # time.
-        light_raw = get_u16_le(53, 1)
-        self.data.light = light_raw // 30 if light_raw >= 30 else light_raw
-        # Whole preset numbers, matching the app's 0-4. Byte 56 is level * 30.
-        self.data.fan = get_u16_le(56, 1) // 30
-        self.data.light_raw = get_u16_le(53, 1)
-        self.data.light_brightness = get_u16_le(54, 1)
-        self.data.light_color = get_u16_le(55, 1)
-        self.data.fan_speed = get_u16_le(57, 1)
-        self.data.auto_flags = get_u16_le(60, 1)
-        self.data.device_state = get_u16_le(33, 1)
-        self.data.mounting_height = get_u16_le(8, 1)
-        self.data.pitch = _signed8(get_u16_le(29, 1))
-        self.data.roll = _signed8(get_u16_le(31, 1))
-        self.data.grease_filter = get_u16_le(59, 1)
 
         _LOGGER.debug(
             "Parsed Safera data: temperature=%.2f°C, humidity=%.1f%%, CO2=%d ppm, TVOC=%d µg/m³, PM2.5=%.2f µg/m³, uptime=%d s",

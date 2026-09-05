@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from fnmatch import fnmatch
 from typing import Any
 
 import voluptuous as vol
@@ -14,16 +15,31 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
 from homeassistant.helpers.device_registry import format_mac
 
-from .const import ADVERTISED_NAMES, DOMAIN, MANUFACTURER_ID, SERVICE_UUID
+from .const import (
+    ADVERTISED_NAME_PATTERNS,
+    DOMAIN,
+    MANUFACTURER_ID,
+    SERVICE_UUID,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _name_matches(name: str) -> bool:
+    """Whether an advertised local name matches one of our patterns.
+
+    The manifest's bluetooth matchers accept fnmatch wildcards, so this has to
+    as well or discovery and the config flow would disagree about what counts
+    as a hood.
+    """
+    return any(fnmatch(name, pattern) for pattern in ADVERTISED_NAME_PATTERNS)
 
 
 def _is_safera(info: bluetooth.BluetoothServiceInfoBleak) -> bool:
     """Match the same devices the manifest bluetooth matchers do."""
     return (
         SERVICE_UUID in info.service_uuids
-        or (info.name or "") in ADVERTISED_NAMES
+        or _name_matches(info.name or "")
         or MANUFACTURER_ID in info.manufacturer_data
     )
 

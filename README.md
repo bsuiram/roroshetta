@@ -16,16 +16,18 @@ a poll interval.
 **Sensors** — temperature, humidity, CO₂, tVOC, PM2.5, air quality index, illuminance, hob surface
 temperature, mains power drawn by the cooktop, grease filter saturation, stove-guard alarm level and
 presence/activity, light and fan state, pitch and roll, device uptime, and the time the OK button
-was last pressed.
+was last pressed. Plus diagnostics: battery, VOC index, alarm status, sensor and PCU error
+registers, and connected accessories.
 
-**Binary sensors** — stove alarm, and whether the hood has cut power to the cooktop.
+**Binary sensors** — stove alarm, whether the hood has cut power to the cooktop, and whether a
+cooking session is currently latched.
 
 **Controls**
 
 | entity | notes |
 |---|---|
 | Light | on/off, brightness, and colour temperature (2700–4995 K, in 9 K steps) |
-| Fan | on/off and speed, with real feedback from the motor |
+| Fan | on/off and five speed levels, using the hood's own level command so its panel and automatic mode stay in step |
 | Fan auto / Light auto switches | the hood's own automation; see the warning below |
 | Reset grease filter | button |
 | 13 number entities | ventilation sensitivity, sensor height, the five Motor 1 ventilation presets, and brightness + colour for the three light presets |
@@ -96,7 +98,16 @@ block layout and the per-byte meaning of the status frame, including which parts
 `CLAUDE.md` records how each field was established and which earlier guesses turned out to be wrong.
 
 Credit to [magicus/safera-ble](https://github.com/magicus/safera-ble/discussions/1) for an
-independent decoding of an earlier firmware, which several offsets here were checked against.
+independent decoding of an earlier firmware, which several offsets here were checked against, and to
+[CrilleBaba/ha-safera-sense](https://github.com/CrilleBaba/ha-safera-sense) — an independent
+integration for the same hardware, which decodes several bytes this one had left alone and got the
+fan's command choice right before this did.
+
+## Development
+
+`pytest` from the repo root runs the test suite. It needs neither Home Assistant nor a Bluetooth
+adapter — the frame decoding lives in `custom_components/safera/parser.py`, which deliberately
+imports nothing from either, so it can be tested directly against recorded frames.
 
 ## Status
 
